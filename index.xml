@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Rick&#39;s Blog</title>
+    <link>https://ayalastrike.github.io/</link>
+    <description>Recent content on Rick&#39;s Blog</description>
+    <generator>Hugo -- gohugo.io</generator><atom:link href="https://ayalastrike.github.io/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/Database/MySQL/InnoDB/records/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/Database/MySQL/InnoDB/records/</guid>
+      <description>1. 设计     MySQL主要面向的是OLTP场景，所以数据记录采用行存（NSM - n-ary storage model）。
+基于行进行存储有以下几个好处：
+ 记录存放在一个页中，存储一条记录需要访问的页面较少 符合传统机械硬盘的访问方式 易于理解，数据的存取就像是对一张二维表进行访问  在整体上看，表中的数据是按照如下形式组织的：
+那我们如何来理解记录呢？
+首先，在关系数据库系统理论中，通常用元组（tuple）描述记录，用字段（field）描述列，每个元组由多个字段组成，每个表由多个元组组成。
+行和元组在意义上是相等的。但是更愿意将行（row）理解为物理记录，将元组（tuple）理解为逻辑记录。物理记录为行实际存放在物理存储中的格式，其内容由二进制字符串组成，可读性差。逻辑记录则容易理解的多，每张表中的多个记录就像是一个数组。由于其只是“逻辑”上的含义，因此逻辑记录只是物理记录在内存中的表现形式，实际并不占用任何的物理存储空间。
+关系如下图所示：</description>
+    </item>
+    
+  </channel>
+</rss>
