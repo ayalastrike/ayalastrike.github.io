@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="背景 #  MySQL对于statement执行结果报文通常分为两类：Resultset和OK/ERR，针对 DML语句则返回OK/ERR报文，其中包括几个影响记录，扫描记录等属性。但在很多业务场景下，通常 INSERT/UPDATE/DELETE 这样的DML语句后，都会跟随SELECT查询当前记录内容，以进行接下来的业务处理， 为了减少一次 Client &lt;-&gt; DB Server 交互，类似 PostgreSQL / Oracle 都提供了 returning clause 支持 DML 返回 Resultset。
+AliSQL 为了减少对 MySQL 语法兼容性的侵入，并支持 returning 功能， 采用了 native procedure 的方式，使用DBMS_TRANS package，统一使用 returning procedure 来支持 DML 语句返回 Resultset。
+语法 #  DBMS_TRANS.returning(Field_list=&gt;, Statement=&gt;); 其中:
+ Field list : 代表期望的返回字段，以 “,” 进行分割，支持 * 号表达； Statement ：表示要执行的DML 语句， 支持 INSERT / UPDATE / DELETE；  INSERT Returning #  针对 insert 语句， returning proc 返回插入到表中的记录内容；">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="背景 #  MySQL对于statement执行结果报文通常分为两类：Resultset和OK/ERR，针对 DML语句则返回OK/ERR报文，其中包括几个影响记录，扫描记录等属性。但在很多业务场景下，通常 INSERT/UPDATE/DELETE 这样的DML语句后，都会跟随SELECT查询当前记录内容，以进行接下来的业务处理， 为了减少一次 Client &lt;-&gt; DB Server 交互，类似 PostgreSQL / Oracle 都提供了 returning clause 支持 DML 返回 Resultset。
+AliSQL 为了减少对 MySQL 语法兼容性的侵入，并支持 returning 功能， 采用了 native procedure 的方式，使用DBMS_TRANS package，统一使用 returning procedure 来支持 DML 语句返回 Resultset。
+语法 #  DBMS_TRANS.returning(Field_list=&gt;, Statement=&gt;); 其中:
+ Field list : 代表期望的返回字段，以 “,” 进行分割，支持 * 号表达； Statement ：表示要执行的DML 语句， 支持 INSERT / UPDATE / DELETE；  INSERT Returning #  针对 insert 语句， returning proc 返回插入到表中的记录内容；" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/returning/" /><meta property="article:section" content="docs" />
+
+
+
+<title>Returning | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.5dc81443f8b451dd16dac10ec32dd813cfc1a9052ab9fe37c2babcf9cadad9dd.js" integrity="sha256-XcgUQ/i0Ud0W2sEOwy3YE8/BqQUquf43wrq8&#43;cra2d0=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/"class=active>Returning</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>Returning</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#背景">背景</a>
+      <ul>
+        <li><a href="#语法">语法</a></li>
+      </ul>
+    </li>
+    <li><a href="#insert-returning">INSERT Returning</a></li>
+    <li><a href="#update-returning">UPDATE Returning</a></li>
+    <li><a href="#delete-returning">DELETE Returning</a>
+      <ul>
+        <li>
+          <ul>
+            <li><a href="#注意">注意</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><h1 id="背景">
+  背景
+  <a class="anchor" href="#%e8%83%8c%e6%99%af">#</a>
+</h1>
+<p>MySQL对于statement执行结果报文通常分为两类：Resultset和OK/ERR，针对 DML语句则返回OK/ERR报文，其中包括几个影响记录，扫描记录等属性。但在很多业务场景下，通常 INSERT/UPDATE/DELETE 这样的DML语句后，都会跟随SELECT查询当前记录内容，以进行接下来的业务处理， 为了减少一次 Client &lt;-&gt; DB Server 交互，类似 PostgreSQL / Oracle 都提供了 returning clause 支持 DML 返回 Resultset。</p>
+<p>AliSQL 为了减少对 MySQL 语法兼容性的侵入，并支持 returning 功能， 采用了 native procedure 的方式，使用DBMS_TRANS package，统一使用 returning procedure 来支持 DML 语句返回 Resultset。</p>
+<h2 id="语法">
+  语法
+  <a class="anchor" href="#%e8%af%ad%e6%b3%95">#</a>
+</h2>
+<pre><code>DBMS_TRANS.returning(Field_list=&gt;, Statement=&gt;);
+</code></pre><p>其中:</p>
+<ul>
+<li>Field list : 代表期望的返回字段，以 “,” 进行分割，支持 * 号表达；</li>
+<li>Statement ：表示要执行的DML 语句， 支持 INSERT / UPDATE / DELETE；</li>
+</ul>
+<h1 id="insert-returning">
+  INSERT Returning
+  <a class="anchor" href="#insert-returning">#</a>
+</h1>
+<p>针对 insert 语句， returning proc 返回插入到表中的记录内容；</p>
+<pre><code>mysql&gt; CREATE TABLE `t` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `col1` int(11) NOT NULL DEFAULT '1',
+    `col2` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB;
+ 
+mysql&gt; call dbms_trans.returning(&quot;*&quot;, &quot;insert into t(id) values(NULL),(NULL)&quot;);
++----+------+---------------------+
+| id | col1 | col2                |
++----+------+---------------------+
+|  1 |    1 | 2019-09-03 10:39:05 |
+|  2 |    1 | 2019-09-03 10:39:05 |
++----+------+---------------------+
+2 rows in set (0.01 sec)
+</code></pre><p>如果没有填入任何 Fields, returning 将退化成 OK/ERR 报文：</p>
+<pre><code>mysql&gt; call dbms_trans.returning(&quot;&quot;, &quot;insert into t(id) values(NULL),(NULL)&quot;);
+Query OK, 2 rows affected (0.01 sec)
+Records: 2  Duplicates: 0  Warnings: 0
+ 
+mysql&gt; select * from t;
++----+------+---------------------+
+| id | col1 | col2                |
++----+------+---------------------+
+|  1 |    1 | 2019-09-03 10:40:55 |
+|  2 |    1 | 2019-09-03 10:40:55 |
+|  3 |    1 | 2019-09-03 10:41:06 |
+|  4 |    1 | 2019-09-03 10:41:06 |
++----+------+---------------------+
+4 rows in set (0.00 sec)
+</code></pre><p>注意：INSERT returning 只支持 insert values 形式的语法，类似create as， insert select 不支持：</p>
+<pre><code>mysql&gt; call dbms_trans.returning(&quot;&quot;, &quot;insert into t select * from t&quot;);
+ERROR 7527 (HY000): Statement didn't support RETURNING clause
+</code></pre><h1 id="update-returning">
+  UPDATE Returning
+  <a class="anchor" href="#update-returning">#</a>
+</h1>
+<p>针对 update 语句， returning 返回更新后的记录：</p>
+<pre><code>mysql&gt; call dbms_trans.returning(&quot;id, col1, col2&quot;, &quot;update t set col1 = 2 where id &gt;2&quot;);
++----+------+---------------------+
+| id | col1 | col2                |
++----+------+---------------------+
+|  3 |    2 | 2019-09-03 10:41:06 |
+|  4 |    2 | 2019-09-03 10:41:06 |
++----+------+---------------------+
+2 rows in set (0.01 sec)
+</code></pre><p><strong>注意:</strong> UPDATE returning 不支持多表 update 语句。</p>
+<h1 id="delete-returning">
+  DELETE Returning
+  <a class="anchor" href="#delete-returning">#</a>
+</h1>
+<p>针对 delete 语句， returning 返回删除的记录前映像：</p>
+<pre><code>mysql&gt; call dbms_trans.returning(&quot;id, col1, col2&quot;, &quot;delete from t where id &lt; 3&quot;);
++----+------+---------------------+
+| id | col1 | col2                |
++----+------+---------------------+
+|  1 |    1 | 2019-09-03 10:40:55 |
+|  2 |    1 | 2019-09-03 10:40:55 |
++----+------+---------------------+
+2 rows in set (0.00 sec)
+</code></pre><h3 id="注意">
+  注意
+  <a class="anchor" href="#%e6%b3%a8%e6%84%8f">#</a>
+</h3>
+<p><strong>1. 事务上下文</strong> DBMS_TRANS.returning() 不是事务性语句，根据 DML statement 来继承 事务上下文，
+结束事务需要显式的 COMMIT 或者 ROLLBACK。</p>
+<p><strong>2. 字段不支持计算</strong>   Field list 中，只支持表中原生的字段，或者 * 号， 不支持进行计算或者聚合等操作。</p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#背景">背景</a>
+      <ul>
+        <li><a href="#语法">语法</a></li>
+      </ul>
+    </li>
+    <li><a href="#insert-returning">INSERT Returning</a></li>
+    <li><a href="#update-returning">UPDATE Returning</a></li>
+    <li><a href="#delete-returning">DELETE Returning</a>
+      <ul>
+        <li>
+          <ul>
+            <li><a href="#注意">注意</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

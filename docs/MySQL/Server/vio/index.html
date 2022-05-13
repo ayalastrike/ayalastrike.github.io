@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="VIO模块 #  为不同的protocol提供network I/O wrapper，类似于winsock。
+Virtual I/O Library.
+The VIO routines are wrappers for the various network I/O calls that happen with different protocols. The idea is that in the main modules one won&rsquo;t have to write separate bits of code for each protocol. Thus vio&rsquo;s purpose is somewhat like the purpose of Microsoft&rsquo;s winsock library. https://dev.mysql.com/doc/internals/en/vio-directory.html
+ SOCKET封装了socket fd，里面只有fd信息。
+目前支持的protocol：
+ TCP/IP Unix domain socket Named Pipes（Windows only） Shared Memory（Windows only） Secure Sockets（SSL）  Unix domain socket">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="VIO模块 #  为不同的protocol提供network I/O wrapper，类似于winsock。
+Virtual I/O Library.
+The VIO routines are wrappers for the various network I/O calls that happen with different protocols. The idea is that in the main modules one won&rsquo;t have to write separate bits of code for each protocol. Thus vio&rsquo;s purpose is somewhat like the purpose of Microsoft&rsquo;s winsock library. https://dev.mysql.com/doc/internals/en/vio-directory.html
+ SOCKET封装了socket fd，里面只有fd信息。
+目前支持的protocol：
+ TCP/IP Unix domain socket Named Pipes（Windows only） Shared Memory（Windows only） Secure Sockets（SSL）  Unix domain socket" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/vio/" /><meta property="article:section" content="docs" />
+
+
+
+<title>Vio | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.5dc81443f8b451dd16dac10ec32dd813cfc1a9052ab9fe37c2babcf9cadad9dd.js" integrity="sha256-XcgUQ/i0Ud0W2sEOwy3YE8/BqQUquf43wrq8&#43;cra2d0=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/"class=active>VIO</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>Vio</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#vio模块">VIO模块</a></li>
+    <li><a href="#文件组织">文件组织</a></li>
+    <li><a href="#设计">设计</a>
+      <ul>
+        <li><a href="#31-io事件">3.1 I/O事件</a></li>
+        <li><a href="#vio对象">VIO对象</a></li>
+        <li><a href="#常用函数">常用函数</a></li>
+        <li><a href="#psi观测">PSI观测</a></li>
+      </ul>
+    </li>
+    <li><a href="#参考链接">参考链接</a></li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><h1 id="vio模块">
+  VIO模块
+  <a class="anchor" href="#vio%e6%a8%a1%e5%9d%97">#</a>
+</h1>
+<p>为不同的protocol提供network I/O wrapper，类似于winsock。</p>
+<blockquote class="book-hint info">
+  <p>Virtual I/O Library.</p>
+<p>The VIO routines are wrappers for the various network I/O calls that happen with different protocols. The idea is that in the main modules one won&rsquo;t have to write separate bits of code for each protocol. Thus vio&rsquo;s purpose is somewhat like the purpose of Microsoft&rsquo;s winsock library.
+<a href="https://dev.mysql.com/doc/internals/en/vio-directory.html">https://dev.mysql.com/doc/internals/en/vio-directory.html</a></p>
+
+</blockquote>
+
+<p>SOCKET封装了socket fd，里面只有fd信息。</p>
+<p>目前支持的protocol：</p>
+<ul>
+<li>TCP/IP</li>
+<li>Unix domain socket</li>
+<li>Named Pipes（Windows only）</li>
+<li>Shared Memory（Windows only）</li>
+<li>Secure Sockets（SSL）</li>
+</ul>
+<blockquote class="book-hint warning">
+  <p>Unix domain socket</p>
+<p>用于实现同一主机上的进程间通信，即使用socket文件来进行通信。socket原本是为网络通讯设计的，但后来在socket的框架上发展出一种IPC机制，就是UNIX domain socket。虽然网络socket也可用于同一台主机的进程间通讯(通过loopback地址127.0.0.1)，但是UNIX domain socket用于IPC 更有效率：不需要经过网络协议栈，不需要打包拆包、计算校验和、维护序号和应答等，只是将应用层数据从一个进程拷贝到另一个进程。这是因为，IPC机制本质上是可靠的通讯，而网络协议是为不可靠的通讯设计的。</p>
+<p>使用方式：</p>
+<p>socket(AF_UNIX, &hellip;)</p>
+
+</blockquote>
+
+<h1 id="文件组织">
+  文件组织
+  <a class="anchor" href="#%e6%96%87%e4%bb%b6%e7%bb%84%e7%bb%87">#</a>
+</h1>
+<pre><code>include/violite.h       VIO lite（封装了VIO的struct和对外的function）
+vio_priv.h              VIO模块内部头文件
+vio.c                   Declarations + open/close functions
+viosocket.c             Send/retrieve functions
+viossl.c                SSL variations
+viosslfactories.c       Certification / Verification
+viopipe.c               named pipe implemenation（windows only）
+vioshm.c                shared memory implementation（windows only）
+</code></pre><p>文件的层次关系和用途如下图所示：</p>
+<p><img src="/MySQL_VIO_file_layout.png" alt="MySQL_VIO_file_layout" /></p>
+<h1 id="设计">
+  设计
+  <a class="anchor" href="#%e8%ae%be%e8%ae%a1">#</a>
+</h1>
+<h2 id="31-io事件">
+  3.1 I/O事件
+  <a class="anchor" href="#31-io%e4%ba%8b%e4%bb%b6">#</a>
+</h2>
+<p>网络I/O事件分为读、写、连接：</p>
+<pre><code>  VIO_IO_EVENT_CONNECT    IN
+  VIO_IO_EVENT_READ       IN
+  VIO_IO_EVENT_WRITE      OUT
+</code></pre><h2 id="vio对象">
+  VIO对象
+  <a class="anchor" href="#vio%e5%af%b9%e8%b1%a1">#</a>
+</h2>
+<p>对于建链后的连接，两端都分别分配一个VIO对象，用于描述和处理网络I/O。</p>
+<p>client和server支持的连接方式和属性：</p>
+<pre><code>client
+Unix domain socket                VIO_TYPE_SOCKET         VIO_LOCALHOST | VIO_BUFFERED_READ
+TCP/IP                            VIO_TYPE_TCPIP          VIO_BUFFERED_READ
+Shared Memory                     VIO_TYPE_SHARED_MEMORY  VIO_LOCALHOST
+Named Pipes                       VIO_TYPE_NAMEDPIPE      VIO_LOCALHOST
+
+server
+Channel_info_local_socket         VIO_TYPE_SOCKET         VIO_LOCALHOST
+Channel_info_tcpip_socket         VIO_TYPE_TCPIP
+</code></pre><p>VIO对象的数据结构</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#f00">struct</span> st_vio
+{
+  MYSQL_SOCKET  mysql_socket;           <span style="color:#0f0">// socket fd (TCP/IP and Unix domain socket)
+</span><span style="color:#0f0"></span>  my_bool       localhost;              <span style="color:#0f0">// VIO_LOCALHOST
+</span><span style="color:#0f0"></span>  <span style="color:#f00">struct</span> sockaddr_storage   local;      <span style="color:#0f0">// local internet address
+</span><span style="color:#0f0"></span>  <span style="color:#f00">struct</span> sockaddr_storage   remote;     <span style="color:#0f0">// remote internet address
+</span><span style="color:#0f0"></span>  size_t addrLen;                       <span style="color:#0f0">// remote address len
+</span><span style="color:#0f0"></span>  <span style="color:#f00">enum</span> enum_vio_type    type;           <span style="color:#0f0">// protocol type 
+</span><span style="color:#0f0"></span>  my_bool               inactive;       <span style="color:#0f0">// 连接不再活跃（已关闭）
+</span><span style="color:#0f0"></span>
+  <span style="color:#ee82ee">char</span>                  desc[VIO_DESCRIPTION_SIZE]; <span style="color:#0f0">// debug
+</span><span style="color:#0f0"></span>  <span style="color:#ee82ee">char</span>                  *read_buffer;   <span style="color:#0f0">// buffer for vio_read_buff 16k
+</span><span style="color:#0f0"></span>  <span style="color:#ee82ee">char</span>                  *read_pos;      <span style="color:#0f0">// start of unfetched data in the read buffer
+</span><span style="color:#0f0"></span>  <span style="color:#ee82ee">char</span>                  *read_end;      <span style="color:#0f0">// end of unfetched data
+</span><span style="color:#0f0"></span>  <span style="color:#ee82ee">int</span>                   read_timeout;   <span style="color:#0f0">// 读超时
+</span><span style="color:#0f0"></span>  <span style="color:#ee82ee">int</span>                   write_timeout;  <span style="color:#0f0">// 写超时
+</span><span style="color:#0f0"></span>  
+  <span style="color:#0f0">// 通过vtable interface来对不同协议下的实现进行解耦（多态）
+</span><span style="color:#0f0"></span>  <span style="color:#0f0">/* 
+</span><span style="color:#0f0">     viodelete is responsible for cleaning up the VIO object by freeing 
+</span><span style="color:#0f0">     internal buffers, closing descriptors, handles. 
+</span><span style="color:#0f0">  */</span>
+  <span style="color:#ee82ee">void</span>    (*viodelete)(Vio*);
+  <span style="color:#ee82ee">int</span>     (*vioerrno)(Vio*);
+  size_t  (*read)(Vio*, uchar *, size_t);
+  size_t  (*write)(Vio*, <span style="color:#f00">const</span> uchar *, size_t);
+  <span style="color:#ee82ee">int</span>     (*timeout)(Vio*, uint, my_bool);
+  <span style="color:#ee82ee">int</span>     (*viokeepalive)(Vio*, my_bool);
+  <span style="color:#ee82ee">int</span>     (*fastsend)(Vio*);
+  my_bool (*peer_addr)(Vio*, <span style="color:#ee82ee">char</span> *, uint16*, size_t);
+  <span style="color:#ee82ee">void</span>    (*in_addr)(Vio*, <span style="color:#f00">struct</span> sockaddr_storage*);
+  my_bool (*should_retry)(Vio*);
+  my_bool (*was_timeout)(Vio*);
+  <span style="color:#0f0">/* 
+</span><span style="color:#0f0">     vioshutdown is resposnible to shutdown/close the channel, so that no 
+</span><span style="color:#0f0">     further communications can take place, however any related buffers,
+</span><span style="color:#0f0">     descriptors, handles can remain valid after a shutdown.
+</span><span style="color:#0f0">  */</span>
+  <span style="color:#ee82ee">int</span>     (*vioshutdown)(Vio*);
+  my_bool (*is_connected)(Vio*);
+  my_bool (*has_data) (Vio*);
+  <span style="color:#ee82ee">int</span> (*io_wait)(Vio*, <span style="color:#f00">enum</span> enum_vio_io_event, <span style="color:#ee82ee">int</span>);
+  my_bool (*connect)(Vio*, <span style="color:#f00">struct</span> sockaddr *, socklen_t, <span style="color:#ee82ee">int</span>);
+
+};
+</code></pre></div><p>VIO对象的创建、初始化和销毁：</p>
+<p><img src="/MySQL_VIO_connection_shutdown.png" alt="MySQL_VIO_connection_shutdown" /></p>
+<h2 id="常用函数">
+  常用函数
+  <a class="anchor" href="#%e5%b8%b8%e7%94%a8%e5%87%bd%e6%95%b0">#</a>
+</h2>
+<p>VIO模块中的常用函数如下：</p>
+<pre><code>int vio_io_wait       // 等待网络I/O时间通知（poll/select）
+
+vio_read              // io读
+vio_read_buff         // io缓冲读
+vio_write             // io写
+
+vio_fastsend          // 尽可能设为TCP_NODELAY
+vio_keepalive         // 尽可能设置TCP保活 SO_KEEPALIVE
+vio_timeout           // 设置超时
+vio_should_retry      // 是否需要重试read/write（SOCKET_EINTR）
+vio_was_timeout       // 是否超时（SOCKET_ETIMEDOUT）
+vio_is_connected      // 是否处于连接中，通过vio_io_ait尝试read/write，或者通过socket_peek_read看是否有可读的数据
+vio_pending           // 获得缓冲区还有多少数据可以读 ioctl(FIONREAD) debug使用
+vio_description       // 打印socket/TCP信息 vio-&gt;desc debug使用
+vio_type              // 获得连接的protocol类型
+vio_errno             // 获取socket error
+vio_fd                // 获得socket fd
+vio_socket_connect    // client发起connect
+vio_set_blocking      // 设置socket fd为阻塞/非阻塞
+vio_getnameinfo       // 获得socket可读信息
+vio_peer_addr         // 获得远程socket的可读地址
+vio_get_normalized_ip_string  // 获得socket可读信息
+vio_is_no_name_error  // 是否错误为EAI_NONAME - Neither nodename nor servname provided, or not known. 即Name resolution error. Your hostname is invalid. It's not resolving through DNS to any network location.
+</code></pre><h2 id="psi观测">
+  PSI观测
+  <a class="anchor" href="#psi%e8%a7%82%e6%b5%8b">#</a>
+</h2>
+<p>MySQL通过PSI机制观测一些关键路径和节点，在处理网络I/O时，其中的观测点是等待网络读写事件。</p>
+<p>入口是</p>
+<pre><code>int vio_io_wait       // 等待网络I/O时间通知（poll/select）
+</code></pre><p>通过PSI提供状态的监测。</p>
+<pre><code>宏
+1. 定义变量
+  #define MYSQL_SOCKET_WAIT_VARIABLES(LOCKER, STATE) \
+    struct PSI_socket_locker* LOCKER; \
+    PSI_socket_locker_state STATE;
+
+2. 进入socket等待
+  #define MYSQL_START_SOCKET_WAIT(LOCKER, STATE, SOCKET, OP, COUNT) \
+    LOCKER= inline_mysql_start_socket_wait(STATE, SOCKET, OP, COUNT,\
+                                           __FILE__, __LINE__)
+3. 结束socket等待
+  #define MYSQL_END_SOCKET_WAIT(LOCKER, COUNT) \
+    inline_mysql_end_socket_wait(LOCKER, COUNT)
+</code></pre><p>使用</p>
+<pre><code>MYSQL_SOCKET_WAIT_VARIABLES(locker, state)    // 定义socket locker和locker state
+MYSQL_START_SOCKET_WAIT(locker, &amp;state, vio-&gt;mysql_socket, PSI_SOCKET_SELECT, 0);
+poll/select...
+MYSQL_END_SOCKET_WAIT(locker, 0);
+</code></pre><p>其中函数指针的管理如下：</p>
+<pre><code>start_socket_wait_v1_t start_socket_wait;
+在pfs.cc中的PFS_v1注册
+pfs_start_socket_wait_v1
+
+end_socket_wait_v1_t end_socket_wait;
+在pfs.cc中的PFS_v1注册
+pfs_end_socket_wait_v1
+</code></pre><h1 id="参考链接">
+  参考链接
+  <a class="anchor" href="#%e5%8f%82%e8%80%83%e9%93%be%e6%8e%a5">#</a>
+</h1>
+<p><a href="https://dev.mysql.com/doc/internals/en/vio-directory.html">https://dev.mysql.com/doc/internals/en/vio-directory.html</a></p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#vio模块">VIO模块</a></li>
+    <li><a href="#文件组织">文件组织</a></li>
+    <li><a href="#设计">设计</a>
+      <ul>
+        <li><a href="#31-io事件">3.1 I/O事件</a></li>
+        <li><a href="#vio对象">VIO对象</a></li>
+        <li><a href="#常用函数">常用函数</a></li>
+        <li><a href="#psi观测">PSI观测</a></li>
+      </ul>
+    </li>
+    <li><a href="#参考链接">参考链接</a></li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

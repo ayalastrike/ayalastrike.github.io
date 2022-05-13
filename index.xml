@@ -100,7 +100,66 @@ MySQL大事时间表：
       
       <guid>https://ayalastrike.github.io/docs/MySQL/Server/connection_handler/</guid>
       <description>概述 #  在MySQL中，对于client发来的请求，其处理流程分为建链和请求处理两部分，这两个阶段分别称为connection phase和command phase。
-MySQL的server-client protocol交互如下：</description>
+MySQL的server-client protocol交互如下：
+从上图中可以看出，connection phase负责连接的建立，而日常的query处理，则称为command phase，command phase的结束，以COM_QUIT query的到来作为标志。
+一般典型的交互过程是connect，query，query，query&amp;hellip; quit，其中query可以是dml、ddl、multi-statement或是prepared statement。
+下面我们先看一下connection phase。
+建链 #  connection phase用于在client-server间建立连接，而建链分为TCP建链和应用建链。
+TCP建链是指TCP socket的listen、accept。
+应用建链是在TCP建链的基础上，通过应用层协议进行认证：server发送handshake（initial handshake）、客户端回username/pwd（handshake response），server回应是否通过认证（OK/Error）。
+我们接下来首先看一下connection phase，即在MySQL中如何处理TCP建链和应用建链的。
+TCP建链 #  TCP连接处理分为两步：
+ 初始化，创建conn_mgr和conn_handler，acceptor和listener 监听建链，由acceptor+listener负责 对已建链连接进行线程分发处理，由conn_mgr+conn_handler负责  整体流程如下图所示：
+代码实现
+mysqld_main init_common_variables Connection_handler_manager::init() // 初始化conn_mgr和conn_handler  network_init()	// 初始化网络 	set_ports();	// 设置port  // 初始化acceptor、listener 	Mysqld_socket_listener *mysqld_socket_listener= new (std::nothrow) Mysqld_socket_listener(bind_addr_str, mysqld_port, back_log, mysqld_port_timeout, unix_sock_name); Connection_acceptor&amp;lt;Mysqld_socket_listener&amp;gt; *mysqld_socket_acceptor= new (std::nothrow) Connection_acceptor&amp;lt;Mysqld_socket_listener&amp;gt;(mysqld_socket_listener); mysqld_socket_acceptor-&amp;gt;init_connection_acceptor(); .</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/net/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/net/</guid>
+      <description>MySQL packet的结构如下：
+packet length (3 bytes) // 数据
+packet number (1 byte) // 保序
+compression length (3 bytes) optional // 压缩
+compression packet number （1 byte） optional // 保序
+packet data
+ 因为采用3个字节存储包的长度，所以支持的包最大为 MAX_PACKET_LENGTH (256L256L256L-1)。如果数据流超过包最大值（16M），则通过packet number（ne→pkt_nr）保序。
+发包 #  my_net_write #  发包，Write a logical packet with packet header.
+net_write_buff #  发送缓冲区，Caching the data in a local buffer before sending it.
+每个Net对象有一个buffer(net-&amp;gt;buff)，即将发送的数据被拷贝到这个buffer中。如果buffer未满则进行memcpy，并更新写入点位（net-&amp;gt;write_pos）；满了当Buffer满时需要立刻发出到客户端（net_write_packet）。
+net_write_packet #  socket写数据，Write a MySQL protocol packet to the network handler.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/protocol/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/protocol/</guid>
+      <description>MySQL client-server protocol：https://dev.mysql.com/doc/internals/en/client-server-protocol.html
+MySQL 5.7重构了Protocol模块
+我们在这里主要聚焦在command phase，即MySQL server和client如何处理query的交互。
+我们从MySQL协议可以知道，在query的交互上，一般采用ping-pong模型，即：
+ client-&amp;gt;server：发query server-&amp;gt;client：回包  所以我们在下面详细拆解这两个阶段。
+读取query #  当client发送一条query后，server对query进行以下处理：
+ 读包 解析包体 根据命令指派执行  数据报文包括包头+包体，包头已在读包内部验证后丢弃（read_packet），然后包体返回给Protocol_classic::get_command封装为raw_packet。从raw_packet[0]中判断query的命令号，进行报文解析（parse_packet），拆解为COM_DATA（根据命令号封装了不同的struct）。
+do_command // conn_handler Protocol_classic::get_command // 读包 Protocol_classic::read_packet my_net_read // 处理多包、压缩包 net_read_packet // 将读到的数据填充到NET中 Protocol_classic::parse_packet // 解析包体 dispatch_command // 根据命令指派执行 回包 #  返回的报文类型有：OK Packet，Error Packet和结果集包（Data Packet，EOF Packet）。
+OK Packet #  do_command dispatch_command THD::send_statement_status // 根据这条statement执行的情况确定回包类型 Protocol_classic::send_ok // 回OK包 Error Packet #  do_command dispatch_command THD::send_statement_status // 根据这条statement执行的情况确定回包类型 Protocol_classic::send_error // 回错误包 结果集包 #  结果集包的结构如下:</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/returning/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/returning/</guid>
+      <description>背景 #  MySQL对于statement执行结果报文通常分为两类：Resultset和OK/ERR，针对 DML语句则返回OK/ERR报文，其中包括几个影响记录，扫描记录等属性。但在很多业务场景下，通常 INSERT/UPDATE/DELETE 这样的DML语句后，都会跟随SELECT查询当前记录内容，以进行接下来的业务处理， 为了减少一次 Client &amp;lt;-&amp;gt; DB Server 交互，类似 PostgreSQL / Oracle 都提供了 returning clause 支持 DML 返回 Resultset。
+AliSQL 为了减少对 MySQL 语法兼容性的侵入，并支持 returning 功能， 采用了 native procedure 的方式，使用DBMS_TRANS package，统一使用 returning procedure 来支持 DML 语句返回 Resultset。
+语法 #  DBMS_TRANS.returning(Field_list=&amp;gt;, Statement=&amp;gt;); 其中:
+ Field list : 代表期望的返回字段，以 “,” 进行分割，支持 * 号表达； Statement ：表示要执行的DML 语句， 支持 INSERT / UPDATE / DELETE；  INSERT Returning #  针对 insert 语句， returning proc 返回插入到表中的记录内容；</description>
     </item>
     
     <item>
@@ -115,6 +174,17 @@ main() // 入口 sql/main.cc mysqld_main() // sql/mysqld.cc // 记录入参 my_p
     
     <item>
       <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/thd/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/thd/</guid>
+      <description>THD对象 #  THD封装了线程相关的数据，可以视作一个处理单元。
+The size of the THD is ~10K and its definition is found in sql_class.h.
+The THD is a large data structure which is used to keep track of various aspects of execution state. Memory rooted in the THD will grow significantly during query execution, but exactly how much it grows will depend upon the query. For memory planning purposes we recommend to plan for ~10MB per connection on average.</description>
+    </item>
+    
+    <item>
+      <title></title>
       <link>https://ayalastrike.github.io/docs/MySQL/Server/ThreadPool/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
@@ -124,11 +194,25 @@ main() // 入口 sql/main.cc mysqld_main() // sql/mysqld.cc // 记录入参 my_p
     
     <item>
       <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/vio/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/vio/</guid>
+      <description>VIO模块 #  为不同的protocol提供network I/O wrapper，类似于winsock。
+Virtual I/O Library.
+The VIO routines are wrappers for the various network I/O calls that happen with different protocols. The idea is that in the main modules one won&amp;rsquo;t have to write separate bits of code for each protocol. Thus vio&amp;rsquo;s purpose is somewhat like the purpose of Microsoft&amp;rsquo;s winsock library. https://dev.mysql.com/doc/internals/en/vio-directory.html
+ SOCKET封装了socket fd，里面只有fd信息。
+目前支持的protocol：
+ TCP/IP Unix domain socket Named Pipes（Windows only） Shared Memory（Windows only） Secure Sockets（SSL）  Unix domain socket</description>
+    </item>
+    
+    <item>
+      <title></title>
       <link>https://ayalastrike.github.io/menu/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/menu/</guid>
-      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理 Thread Pool   InnoDB  概览 源码结构 基本数据结构和算法 os record page      </description>
+      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning   NET VIO   Thread Pool   InnoDB  概览 源码结构 基本数据结构和算法 os record page      </description>
     </item>
     
   </channel>

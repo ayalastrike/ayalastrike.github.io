@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="THD对象 #  THD封装了线程相关的数据，可以视作一个处理单元。
+The size of the THD is ~10K and its definition is found in sql_class.h.
+The THD is a large data structure which is used to keep track of various aspects of execution state. Memory rooted in the THD will grow significantly during query execution, but exactly how much it grows will depend upon the query. For memory planning purposes we recommend to plan for ~10MB per connection on average.">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="THD对象 #  THD封装了线程相关的数据，可以视作一个处理单元。
+The size of the THD is ~10K and its definition is found in sql_class.h.
+The THD is a large data structure which is used to keep track of various aspects of execution state. Memory rooted in the THD will grow significantly during query execution, but exactly how much it grows will depend upon the query. For memory planning purposes we recommend to plan for ~10MB per connection on average." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/thd/" /><meta property="article:section" content="docs" />
+
+
+
+<title>Thd | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.5dc81443f8b451dd16dac10ec32dd813cfc1a9052ab9fe37c2babcf9cadad9dd.js" integrity="sha256-XcgUQ/i0Ud0W2sEOwy3YE8/BqQUquf43wrq8&#43;cra2d0=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/"class=active>THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>Thd</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#thd对象">THD对象</a></li>
+    <li><a href="#global_thd_manager">Global_THD_manager</a>
+      <ul>
+        <li><a href="#生命周期">生命周期</a></li>
+        <li><a href="#api">API</a></li>
+        <li><a href="#thd操作">thd操作</a>
+          <ul>
+            <li><a href="#查找">查找</a></li>
+            <li><a href="#计数">计数</a></li>
+            <li><a href="#执行操作">执行操作</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><a href="#kill-process_id">kill process_id</a>
+      <ul>
+        <li><a href="#处理kill">处理kill</a>
+          <ul>
+            <li><a href="#标记kill">标记kill</a></li>
+            <li><a href="#中止执行">中止执行</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><h1 id="thd对象">
+  THD对象
+  <a class="anchor" href="#thd%e5%af%b9%e8%b1%a1">#</a>
+</h1>
+<p>THD封装了线程相关的数据，可以视作一个处理单元。</p>
+<p>The size of the THD is ~10K and its definition is found in sql_class.h.</p>
+<p>The THD is a large data structure which is used to keep track of various aspects of execution state. Memory rooted in the THD will grow significantly during query execution, but exactly how much it grows will depend upon the query. For memory planning purposes we recommend to plan for ~10MB per connection on average.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">For each client connection we create a separate <span style="color:#f00">thread</span> with THD serving as a <span style="color:#f00">thread</span>/connection descriptor
+ 
+<span style="color:#f00">class</span> THD
+{
+  NET     net;                      <span style="color:#0f0">// client connection descriptor
+</span><span style="color:#0f0"></span>  Vio* active_vio;
+  Protocol *m_protocol;             <span style="color:#0f0">// Current protocol
+</span><span style="color:#0f0"></span> 
+  Protocol_text   protocol_text;    <span style="color:#0f0">// Normal protocol
+</span><span style="color:#0f0"></span>  Protocol_binary protocol_binary;  <span style="color:#0f0">// Binary protocol
+</span><span style="color:#0f0"></span>  ...
+}
+</code></pre></div><h1 id="global_thd_manager">
+  Global_THD_manager
+  <a class="anchor" href="#global_thd_manager">#</a>
+</h1>
+<p>Global_THD_manager作为thd管理器，统一提供thd资源的管控，提供thd的全局查找、计数、执行操作。</p>
+<h2 id="生命周期">
+  生命周期
+  <a class="anchor" href="#%e7%94%9f%e5%91%bd%e5%91%a8%e6%9c%9f">#</a>
+</h2>
+<pre><code>create_instance()       // 创建thd_mgr，mysqld启动时
+destroy_instance()      // 销毁thd_mgr，mysqld关闭时
+get_instance()          // 在mysqld运行时获取thd_mgr，以调用其api
+</code></pre><h2 id="api">
+  API
+  <a class="anchor" href="#api">#</a>
+</h2>
+<pre><code>add_thd()               // 添加thd
+remove_thd()            // 移除thd
+wait_till_no_thd        // 移除所有thd
+</code></pre><h2 id="thd操作">
+  thd操作
+  <a class="anchor" href="#thd%e6%93%8d%e4%bd%9c">#</a>
+</h2>
+<h3 id="查找">
+  查找
+  <a class="anchor" href="#%e6%9f%a5%e6%89%be">#</a>
+</h3>
+<p>提供Find_THD_Impl函数模板，并由以下方法调用：</p>
+<ul>
+<li>find_thd</li>
+</ul>
+<p>函数模板</p>
+<pre><code>Find_THD_variable   在PS查看thd信息时提供并发控制（thd-&gt;LOCK_thd_data）
+Find_thd_user_var   在PS查看thd信息时提供并发控制（thd-&gt;LOCK_thd_data）
+...
+</code></pre><h3 id="计数">
+  计数
+  <a class="anchor" href="#%e8%ae%a1%e6%95%b0">#</a>
+</h3>
+<p>num_thread_running
+thread_created</p>
+<h3 id="执行操作">
+  执行操作
+  <a class="anchor" href="#%e6%89%a7%e8%a1%8c%e6%93%8d%e4%bd%9c">#</a>
+</h3>
+<p>提供Do_THD_Impl函数模板，并由以下方法调用：</p>
+<ul>
+<li>do_for_all_thd_copy ：提供LOCK_thd_remove对remove thd进行并发控制</li>
+<li>do_for_all_thd ：不做并发控制</li>
+</ul>
+<p>函数模板</p>
+<pre><code>Set_kill_conn       // kill thd
+List_process_list   // 列出所有thd
+...
+</code></pre><h1 id="kill-process_id">
+  kill process_id
+  <a class="anchor" href="#kill-process_id">#</a>
+</h1>
+<p>kill命令格式</p>
+<pre><code>KILL [CONNECTION | QUERY] processlist_id
+</code></pre><p>其中：</p>
+<ul>
+<li>CONNECTION：中止processlist_id对应的查询中止，连接退出</li>
+<li>QUERY ：中止processlist_id对应的查询中止，连接保持</li>
+<li>Ctrl+C ：MySQL client Ctrl+C会新建立一个临时的connection，将kill query的命令发送给MySQL，停止之前的命令，再回收掉临时的connection</li>
+</ul>
+<h2 id="处理kill">
+  处理kill
+  <a class="anchor" href="#%e5%a4%84%e7%90%86kill">#</a>
+</h2>
+<p>kill的执行是异步的，分为标记kill和中止执行两阶段。</p>
+<h3 id="标记kill">
+  标记kill
+  <a class="anchor" href="#%e6%a0%87%e8%ae%b0kill">#</a>
+</h3>
+<p>当MySQL Server收到kill命令时，会根据命令中指定的process_id，查找到对应的THD，设置kill标记</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#f00">static</span> uint <span style="color:#ff0">kill_one_thread</span>(THD *thd, my_thread_id id, <span style="color:#ee82ee">bool</span> only_kill_query)
+{
+  THD *tmp= NULL;
+  uint error=ER_NO_SUCH_THREAD;
+  Find_thd_with_id find_thd_with_id(id);
+ 
+  DBUG_ENTER(<span style="color:#87ceeb">&#34;kill_one_thread&#34;</span>);
+  DBUG_PRINT(<span style="color:#87ceeb">&#34;enter&#34;</span>, (<span style="color:#87ceeb">&#34;id=%u only_kill=%d&#34;</span>, id, only_kill_query));
+  tmp= Global_THD_manager::get_instance()-&gt;find_thd(&amp;find_thd_with_id);
+  ...
+  tmp-&gt;awake(only_kill_query ? THD::KILL_QUERY : THD::KILL_CONNECTION);
+  ...
+}
+</code></pre></div><h3 id="中止执行">
+  中止执行
+  <a class="anchor" href="#%e4%b8%ad%e6%ad%a2%e6%89%a7%e8%a1%8c">#</a>
+</h3>
+<ol>
+<li>空闲的process_id立即退出</li>
+</ol>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#ee82ee">void</span> THD::awake(THD::killed_state state_to_set) {
+  ...
+  <span style="color:#f00">if</span> (<span style="color:#f00">this</span>-&gt;m_server_idle &amp;&amp; state_to_set == KILL_QUERY)
+  { <span style="color:#0f0">/* nothing */</span> }
+  <span style="color:#f00">else</span>
+  {
+    killed= state_to_set;
+  }
+  ...
+}
+</code></pre></div><ol start="2">
+<li>
+<p>在SQL的执行过程中，会在各种位置检测THD上的kill标记，中止执行，清理后退出</p>
+</li>
+<li>
+<p>等待中响应</p>
+<p>如果查询此时等待在某个condition_variable上，那么短时间内可能很难唤醒，如果出现了死锁的情况，那么就更不可能唤醒了。因此，kill实现了针对等待的特殊响应，其主要思路是：在某个查询进入等待状态之前，在THD上记录下当前查询等待的condition_variable对象及其对应的mutex。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#ee82ee">void</span> <span style="color:#ff0">enter_cond</span>(mysql_cond_t *cond, mysql_mutex_t* mutex,
+                <span style="color:#f00">const</span> PSI_stage_info *stage, PSI_stage_info *old_stage,
+                <span style="color:#f00">const</span> <span style="color:#ee82ee">char</span> *src_function, <span style="color:#f00">const</span> <span style="color:#ee82ee">char</span> *src_file,
+                <span style="color:#ee82ee">int</span> src_line)
+{
+  DBUG_ENTER(<span style="color:#87ceeb">&#34;THD::enter_cond&#34;</span>);
+  mysql_mutex_assert_owner(mutex);
+  <span style="color:#0f0">/*
+</span><span style="color:#0f0">    Sic: We don&#39;t lock LOCK_current_cond here.
+</span><span style="color:#0f0">    If we did, we could end up in deadlock with THD::awake()
+</span><span style="color:#0f0">    which locks current_mutex while LOCK_current_cond is locked.
+</span><span style="color:#0f0">  */</span>
+  current_mutex= mutex;
+  current_cond= cond;
+  enter_stage(stage, old_stage, src_function, src_file, src_line);
+  DBUG_VOID_RETURN;
+}
+</code></pre></div><p>在等待的条件上增加对thd-&gt;killed状态的判断，即检测到killed时退出等待</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">longlong Item_func_sleep::val_int()
+{
+  THD *thd= current_thd;
+  Interruptible_wait <span style="color:#ff0">timed_cond</span>(thd);
+  mysql_cond_t cond;
+    
+  timeout= args[<span style="color:#f60">0</span>]-&gt;val_real();
+    
+  mysql_cond_init(key_item_func_sleep_cond, &amp;cond);
+  mysql_mutex_lock(&amp;LOCK_item_func_sleep);
+    
+  thd-&gt;ENTER_COND(&amp;cond, &amp;LOCK_item_func_sleep, &amp;stage_user_sleep, NULL);
+    
+  error= <span style="color:#f60">0</span>;
+  thd_wait_begin(thd, THD_WAIT_SLEEP);
+  <span style="color:#f00">while</span> (!thd-&gt;killed)
+  {
+    error= timed_cond.wait(&amp;cond, &amp;LOCK_item_func_sleep);
+    <span style="color:#f00">if</span> (error == ETIMEDOUT || error == ETIME)
+      <span style="color:#f00">break</span>;
+    error= <span style="color:#f60">0</span>;
+  }
+  thd_wait_end(thd);
+  mysql_mutex_unlock(&amp;LOCK_item_func_sleep);
+  thd-&gt;EXIT_COND(NULL);
+    
+  mysql_cond_destroy(&amp;cond);
+    
+  <span style="color:#f00">return</span> <span style="color:#ff0">MY_TEST</span>(!error);       <span style="color:#0f0">// Return 1 killed
+</span><span style="color:#0f0"></span>}
+</code></pre></div><p>kill发生时, 使用THD记录的condition_variable进行pthread_cond_signal，进行唤醒，等待的线程醒来检测kill标记，发现已被标记kill快速退出。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#ee82ee">void</span> THD::awake(THD::killed_state state_to_set)
+{
+  ...
+  <span style="color:#0f0">/* Broadcast a condition to kick the target if it is waiting on it. */</span>
+  <span style="color:#f00">if</span> (is_killable)
+  {
+    mysql_mutex_lock(&amp;LOCK_current_cond);
+    <span style="color:#0f0">/*
+</span><span style="color:#0f0">      This broadcast could be up in the air if the victim thread
+</span><span style="color:#0f0">      exits the cond in the time between read and broadcast, but that is
+</span><span style="color:#0f0">      ok since all we want to do is to make the victim thread get out
+</span><span style="color:#0f0">      of waiting on current_cond.
+</span><span style="color:#0f0">      If we see a non-zero current_cond: it cannot be an old value (because
+</span><span style="color:#0f0">      then exit_cond() should have run and it can&#39;t because we have mutex); so
+</span><span style="color:#0f0">      it is the true value but maybe current_mutex is not yet non-zero (we&#39;re
+</span><span style="color:#0f0">      in the middle of enter_cond() and there is a &#34;memory order
+</span><span style="color:#0f0">      inversion&#34;). So we test the mutex too to not lock 0.
+</span><span style="color:#0f0">    
+</span><span style="color:#0f0">      Note that there is a small chance we fail to kill. If victim has locked
+</span><span style="color:#0f0">      current_mutex, but hasn&#39;t yet entered enter_cond() (which means that
+</span><span style="color:#0f0">      current_cond and current_mutex are 0), then the victim will not get
+</span><span style="color:#0f0">      a signal and it may wait &#34;forever&#34; on the cond (until
+</span><span style="color:#0f0">      we issue a second KILL or the status it&#39;s waiting for happens).
+</span><span style="color:#0f0">      It&#39;s true that we have set its thd-&gt;killed but it may not
+</span><span style="color:#0f0">      see it immediately and so may have time to reach the cond_wait().
+</span><span style="color:#0f0">    
+</span><span style="color:#0f0">      However, where possible, we test for killed once again after
+</span><span style="color:#0f0">      enter_cond(). This should make the signaling as safe as possible.
+</span><span style="color:#0f0">      However, there is still a small chance of failure on platforms with
+</span><span style="color:#0f0">      instruction or memory write reordering.
+</span><span style="color:#0f0">    */</span>
+    <span style="color:#f00">if</span> (current_cond &amp;&amp; current_mutex)
+    {
+      mysql_mutex_lock(current_mutex);
+      mysql_cond_broadcast(current_cond);
+      mysql_mutex_unlock(current_mutex);
+    }
+    mysql_mutex_unlock(&amp;LOCK_current_cond);
+  }
+  DBUG_VOID_RETURN;
+}
+</code></pre></div></li>
+</ol>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#thd对象">THD对象</a></li>
+    <li><a href="#global_thd_manager">Global_THD_manager</a>
+      <ul>
+        <li><a href="#生命周期">生命周期</a></li>
+        <li><a href="#api">API</a></li>
+        <li><a href="#thd操作">thd操作</a>
+          <ul>
+            <li><a href="#查找">查找</a></li>
+            <li><a href="#计数">计数</a></li>
+            <li><a href="#执行操作">执行操作</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><a href="#kill-process_id">kill process_id</a>
+      <ul>
+        <li><a href="#处理kill">处理kill</a>
+          <ul>
+            <li><a href="#标记kill">标记kill</a></li>
+            <li><a href="#中止执行">中止执行</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

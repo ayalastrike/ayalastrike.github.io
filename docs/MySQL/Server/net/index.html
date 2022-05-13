@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="MySQL packet的结构如下：
+packet length (3 bytes) // 数据
+packet number (1 byte) // 保序
+compression length (3 bytes) optional // 压缩
+compression packet number （1 byte） optional // 保序
+packet data
+ 因为采用3个字节存储包的长度，所以支持的包最大为 MAX_PACKET_LENGTH (256L256L256L-1)。如果数据流超过包最大值（16M），则通过packet number（ne→pkt_nr）保序。
+发包 #  my_net_write #  发包，Write a logical packet with packet header.
+net_write_buff #  发送缓冲区，Caching the data in a local buffer before sending it.
+每个Net对象有一个buffer(net-&gt;buff)，即将发送的数据被拷贝到这个buffer中。如果buffer未满则进行memcpy，并更新写入点位（net-&gt;write_pos）；满了当Buffer满时需要立刻发出到客户端（net_write_packet）。
+net_write_packet #  socket写数据，Write a MySQL protocol packet to the network handler.">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="MySQL packet的结构如下：
+packet length (3 bytes) // 数据
+packet number (1 byte) // 保序
+compression length (3 bytes) optional // 压缩
+compression packet number （1 byte） optional // 保序
+packet data
+ 因为采用3个字节存储包的长度，所以支持的包最大为 MAX_PACKET_LENGTH (256L256L256L-1)。如果数据流超过包最大值（16M），则通过packet number（ne→pkt_nr）保序。
+发包 #  my_net_write #  发包，Write a logical packet with packet header.
+net_write_buff #  发送缓冲区，Caching the data in a local buffer before sending it.
+每个Net对象有一个buffer(net-&gt;buff)，即将发送的数据被拷贝到这个buffer中。如果buffer未满则进行memcpy，并更新写入点位（net-&gt;write_pos）；满了当Buffer满时需要立刻发出到客户端（net_write_packet）。
+net_write_packet #  socket写数据，Write a MySQL protocol packet to the network handler." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/net/" /><meta property="article:section" content="docs" />
+
+
+
+<title>Net | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.5dc81443f8b451dd16dac10ec32dd813cfc1a9052ab9fe37c2babcf9cadad9dd.js" integrity="sha256-XcgUQ/i0Ud0W2sEOwy3YE8/BqQUquf43wrq8&#43;cra2d0=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/"class=active>NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>Net</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#发包">发包</a>
+      <ul>
+        <li><a href="#my_net_write">my_net_write</a></li>
+        <li><a href="#net_write_buff">net_write_buff</a></li>
+        <li><a href="#net_write_packet">net_write_packet</a></li>
+        <li><a href="#net_write_raw_loop">net_write_raw_loop</a></li>
+        <li><a href="#net_flush">net_flush</a></li>
+      </ul>
+    </li>
+    <li><a href="#收包">收包</a>
+      <ul>
+        <li><a href="#my_net_read">my_net_read</a></li>
+        <li><a href="#net_read_packet">net_read_packet</a></li>
+        <li><a href="#net_read_packet_header">net_read_packet_header</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><p>MySQL packet的结构如下：</p>
+<blockquote class="book-hint info">
+  <p>packet length (3 bytes)  	         			// 数据</p>
+<p>packet number (1 byte)            			// 保序</p>
+<p>compression length (3 bytes) optional    <code>// 压缩</code></p>
+<p>compression packet number （1 byte） optional // 保序</p>
+<p>packet data</p>
+
+</blockquote>
+
+<p>因为采用3个字节存储包的长度，所以支持的包最大为 MAX_PACKET_LENGTH (256L<em>256L</em>256L-1)。如果数据流超过包最大值（16M），则通过packet number（ne→pkt_nr）保序。</p>
+<h1 id="发包">
+  发包
+  <a class="anchor" href="#%e5%8f%91%e5%8c%85">#</a>
+</h1>
+<h2 id="my_net_write">
+  my_net_write
+  <a class="anchor" href="#my_net_write">#</a>
+</h2>
+<p>发包，Write a logical packet with packet header.</p>
+<h2 id="net_write_buff">
+  net_write_buff
+  <a class="anchor" href="#net_write_buff">#</a>
+</h2>
+<p>发送缓冲区，Caching the data in a local buffer before sending it.</p>
+<p>每个Net对象有一个buffer(net-&gt;buff)，即将发送的数据被拷贝到这个buffer中。如果buffer未满则进行memcpy，并更新写入点位（net-&gt;write_pos）；满了当Buffer满时需要立刻发出到客户端（net_write_packet）。</p>
+<h2 id="net_write_packet">
+  net_write_packet
+  <a class="anchor" href="#net_write_packet">#</a>
+</h2>
+<p>socket写数据，Write a MySQL protocol packet to the network handler.</p>
+<h2 id="net_write_raw_loop">
+  net_write_raw_loop
+  <a class="anchor" href="#net_write_raw_loop">#</a>
+</h2>
+<p>Write a determined number of bytes to a network handler.
+调用vio_write进行socket写</p>
+<h2 id="net_flush">
+  net_flush
+  <a class="anchor" href="#net_flush">#</a>
+</h2>
+<p>Flush write_buffer if not empty.
+也是调用net_write_packet进行socket写数据</p>
+<h1 id="收包">
+  收包
+  <a class="anchor" href="#%e6%94%b6%e5%8c%85">#</a>
+</h1>
+<h2 id="my_net_read">
+  my_net_read
+  <a class="anchor" href="#my_net_read">#</a>
+</h2>
+<p>收包</p>
+<h2 id="net_read_packet">
+  net_read_packet
+  <a class="anchor" href="#net_read_packet">#</a>
+</h2>
+<p>读单包，Read one (variable-length) MySQL protocol packet. A MySQL packet consists of a header and a payload.</p>
+<h2 id="net_read_packet_header">
+  net_read_packet_header
+  <a class="anchor" href="#net_read_packet_header">#</a>
+</h2>
+<p>读包头，Read the header of a packet.
+校验包头中的packet number，确认保序</p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#发包">发包</a>
+      <ul>
+        <li><a href="#my_net_write">my_net_write</a></li>
+        <li><a href="#net_write_buff">net_write_buff</a></li>
+        <li><a href="#net_write_packet">net_write_packet</a></li>
+        <li><a href="#net_write_raw_loop">net_write_raw_loop</a></li>
+        <li><a href="#net_flush">net_flush</a></li>
+      </ul>
+    </li>
+    <li><a href="#收包">收包</a>
+      <ul>
+        <li><a href="#my_net_read">my_net_read</a></li>
+        <li><a href="#net_read_packet">net_read_packet</a></li>
+        <li><a href="#net_read_packet_header">net_read_packet_header</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

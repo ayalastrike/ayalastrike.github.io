@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="MySQL client-server protocol：https://dev.mysql.com/doc/internals/en/client-server-protocol.html
+MySQL 5.7重构了Protocol模块
+我们在这里主要聚焦在command phase，即MySQL server和client如何处理query的交互。
+我们从MySQL协议可以知道，在query的交互上，一般采用ping-pong模型，即：
+ client-&gt;server：发query server-&gt;client：回包  所以我们在下面详细拆解这两个阶段。
+读取query #  当client发送一条query后，server对query进行以下处理：
+ 读包 解析包体 根据命令指派执行  数据报文包括包头&#43;包体，包头已在读包内部验证后丢弃（read_packet），然后包体返回给Protocol_classic::get_command封装为raw_packet。从raw_packet[0]中判断query的命令号，进行报文解析（parse_packet），拆解为COM_DATA（根据命令号封装了不同的struct）。
+do_command // conn_handler Protocol_classic::get_command // 读包 Protocol_classic::read_packet my_net_read // 处理多包、压缩包 net_read_packet // 将读到的数据填充到NET中 Protocol_classic::parse_packet // 解析包体 dispatch_command // 根据命令指派执行 回包 #  返回的报文类型有：OK Packet，Error Packet和结果集包（Data Packet，EOF Packet）。
+OK Packet #  do_command dispatch_command THD::send_statement_status // 根据这条statement执行的情况确定回包类型 Protocol_classic::send_ok // 回OK包 Error Packet #  do_command dispatch_command THD::send_statement_status // 根据这条statement执行的情况确定回包类型 Protocol_classic::send_error // 回错误包 结果集包 #  结果集包的结构如下:">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="MySQL client-server protocol：https://dev.mysql.com/doc/internals/en/client-server-protocol.html
+MySQL 5.7重构了Protocol模块
+我们在这里主要聚焦在command phase，即MySQL server和client如何处理query的交互。
+我们从MySQL协议可以知道，在query的交互上，一般采用ping-pong模型，即：
+ client-&gt;server：发query server-&gt;client：回包  所以我们在下面详细拆解这两个阶段。
+读取query #  当client发送一条query后，server对query进行以下处理：
+ 读包 解析包体 根据命令指派执行  数据报文包括包头&#43;包体，包头已在读包内部验证后丢弃（read_packet），然后包体返回给Protocol_classic::get_command封装为raw_packet。从raw_packet[0]中判断query的命令号，进行报文解析（parse_packet），拆解为COM_DATA（根据命令号封装了不同的struct）。
+do_command // conn_handler Protocol_classic::get_command // 读包 Protocol_classic::read_packet my_net_read // 处理多包、压缩包 net_read_packet // 将读到的数据填充到NET中 Protocol_classic::parse_packet // 解析包体 dispatch_command // 根据命令指派执行 回包 #  返回的报文类型有：OK Packet，Error Packet和结果集包（Data Packet，EOF Packet）。
+OK Packet #  do_command dispatch_command THD::send_statement_status // 根据这条statement执行的情况确定回包类型 Protocol_classic::send_ok // 回OK包 Error Packet #  do_command dispatch_command THD::send_statement_status // 根据这条statement执行的情况确定回包类型 Protocol_classic::send_error // 回错误包 结果集包 #  结果集包的结构如下:" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/protocol/" /><meta property="article:section" content="docs" />
+
+
+
+<title>Protocol | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.5dc81443f8b451dd16dac10ec32dd813cfc1a9052ab9fe37c2babcf9cadad9dd.js" integrity="sha256-XcgUQ/i0Ud0W2sEOwy3YE8/BqQUquf43wrq8&#43;cra2d0=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/"class=active>Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>Protocol</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#读取query">读取query</a></li>
+    <li><a href="#回包">回包</a>
+      <ul>
+        <li><a href="#ok-packet">OK Packet</a></li>
+        <li><a href="#error-packet">Error Packet</a></li>
+        <li><a href="#结果集包">结果集包</a></li>
+      </ul>
+    </li>
+    <li><a href="#mysql-57的协议重构">MySQL 5.7的协议重构</a></li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><p>MySQL client-server protocol：https://dev.mysql.com/doc/internals/en/client-server-protocol.html</p>
+<p>MySQL 5.7重构了Protocol模块</p>
+<p>我们在这里主要聚焦在command phase，即MySQL server和client如何处理query的交互。</p>
+<p>我们从MySQL协议可以知道，在query的交互上，一般采用ping-pong模型，即：</p>
+<ul>
+<li>client-&gt;server：发query</li>
+<li>server-&gt;client：回包</li>
+</ul>
+<p>所以我们在下面详细拆解这两个阶段。</p>
+<h1 id="读取query">
+  读取query
+  <a class="anchor" href="#%e8%af%bb%e5%8f%96query">#</a>
+</h1>
+<p>当client发送一条query后，server对query进行以下处理：</p>
+<ul>
+<li>读包</li>
+<li>解析包体</li>
+<li>根据命令指派执行</li>
+</ul>
+<p>数据报文包括包头+包体，包头已在读包内部验证后丢弃（read_packet），然后包体返回给Protocol_classic::get_command封装为raw_packet。从raw_packet[0]中判断query的命令号，进行报文解析（parse_packet），拆解为COM_DATA（根据命令号封装了不同的struct）。</p>
+<pre><code>do_command                              // conn_handler
+    Protocol_classic::get_command       // 读包
+        Protocol_classic::read_packet
+            my_net_read                 // 处理多包、压缩包
+                net_read_packet         // 将读到的数据填充到NET中
+        Protocol_classic::parse_packet  // 解析包体
+    dispatch_command                    // 根据命令指派执行
+</code></pre><h1 id="回包">
+  回包
+  <a class="anchor" href="#%e5%9b%9e%e5%8c%85">#</a>
+</h1>
+<p>返回的报文类型有：OK Packet，Error Packet和结果集包（Data Packet，EOF Packet）。</p>
+<h2 id="ok-packet">
+  OK Packet
+  <a class="anchor" href="#ok-packet">#</a>
+</h2>
+<pre><code>do_command
+    dispatch_command
+        THD::send_statement_status          // 根据这条statement执行的情况确定回包类型
+            Protocol_classic::send_ok       // 回OK包
+</code></pre><h2 id="error-packet">
+  Error Packet
+  <a class="anchor" href="#error-packet">#</a>
+</h2>
+<pre><code>do_command
+    dispatch_command
+        THD::send_statement_status          // 根据这条statement执行的情况确定回包类型
+            Protocol_classic::send_error    // 回错误包
+</code></pre><h2 id="结果集包">
+  结果集包
+  <a class="anchor" href="#%e7%bb%93%e6%9e%9c%e9%9b%86%e5%8c%85">#</a>
+</h2>
+<p>结果集包的结构如下:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">数据</th>
+<th style="text-align:left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">ResultSet Header</td>
+<td style="text-align:left">列数量</td>
+</tr>
+<tr>
+<td style="text-align:left">Field</td>
+<td style="text-align:left">列（多个）</td>
+</tr>
+<tr>
+<td style="text-align:left">EOF</td>
+<td style="text-align:left"></td>
+</tr>
+<tr>
+<td style="text-align:left">Row</td>
+<td style="text-align:left">行（多个）</td>
+</tr>
+<tr>
+<td style="text-align:left">EOF</td>
+<td style="text-align:left"></td>
+</tr>
+</tbody>
+</table>
+<p>Server层的SQL执行器拼装结果集：</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#0f0">// sql_executor
+</span><span style="color:#0f0"></span>Query_result_send::send_result_set_metadata
+    thd-&gt;send_result_metadata
+        Protocol_classic::start_result_metadata()   <span style="color:#0f0">// 列数量
+</span><span style="color:#0f0"></span>        Protocol_classic::send_field_metadata()     <span style="color:#0f0">// 列（多个）
+</span><span style="color:#0f0"></span>        Protocol_classic::end_result_metadata()     <span style="color:#0f0">// EOF
+</span><span style="color:#0f0"></span>Query_result_send::send_data(List&lt;Item&gt; &amp;items)     <span style="color:#0f0">// 行（多个）
+</span><span style="color:#0f0"></span>    protocol-&gt;start_row();
+    thd-&gt;send_result_set_row(&amp;items)
+    <span style="color:#f00">for</span> loop : items
+        protocl-&gt;store()
+    thd-&gt;inc_sent_row_count(<span style="color:#f60">1</span>);
+    protocol-&gt;end_row()
+Query_result_send::send_eof                         <span style="color:#0f0">// EOF
+</span><span style="color:#0f0"></span>    net_send_ok
+</code></pre></div><p>注意最后两行：send_eof调用了send_ok？？？</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">
+<span style="color:#ee82ee">bool</span> Protocol_classic::send_eof(uint server_status, uint statement_warn_count)
+{
+  DBUG_ENTER(<span style="color:#87ceeb">&#34;Protocol_classic::send_eof&#34;</span>);
+  <span style="color:#ee82ee">bool</span> retval;
+  <span style="color:#0f0">/*
+</span><span style="color:#0f0">    Normally end of statement reply is signaled by OK packet, but in case
+</span><span style="color:#0f0">    of binlog dump request an EOF packet is sent instead. Also, old clients
+</span><span style="color:#0f0">    expect EOF packet instead of OK
+</span><span style="color:#0f0">  */</span>
+<span style="color:#e5e5e5">#ifndef EMBEDDED_LIBRARY
+</span><span style="color:#e5e5e5"></span>  <span style="color:#f00">if</span> (has_client_capability(CLIENT_DEPRECATE_EOF) &amp;&amp;
+      (m_thd-&gt;get_command() != COM_BINLOG_DUMP &amp;&amp;
+       m_thd-&gt;get_command() != COM_BINLOG_DUMP_GTID))
+    retval= net_send_ok(m_thd, server_status, statement_warn_count, <span style="color:#f60">0</span>, <span style="color:#f60">0</span>, NULL,
+                        true);
+  <span style="color:#f00">else</span>
+<span style="color:#e5e5e5">#endif
+</span><span style="color:#e5e5e5"></span>    retval= net_send_eof(m_thd, server_status, statement_warn_count);
+  DBUG_RETURN(retval);
+}
+</code></pre></div><p>这是因为在MySQL 5.7.5中，有一个worklog：<a href="https://dev.mysql.com/worklog/task/?id=7766">WL#7766: Deprecate the EOF packet</a>，认为EOF and OK packets serve the same purpose (to mark the end of a query execution result.</p>
+<p>将ok和eof报文的发送放在了同一块逻辑中，client/server支持一个flag：<a href="https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_ok_packet.html">CLIENT_DEPRECATE_EOF</a>，<a href="https://dev.mysql.com/doc/internals/en/packet-EOF_Packet.html">EOF包说明</a>里也有提到。</p>
+<p>如果我们要自己组装结果集包，则按照如下API组装即可：</p>
+<pre><code>thd-&gt;send_result_metadata
+protocol-&gt;start_row();
+protocol-&gt;store();
+protocol-&gt;end_row();
+my_eof(thd);
+</code></pre><p>下面是一个实际的组装示例：</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">mysql&gt; show sql_filters;
++--------+---------+----------+----------+---------+-------------+
+| type   | item_id | cur_conc | max_conc | key_num | key_str     |
++--------+---------+----------+----------+---------+-------------+
+| SELECT |       <span style="color:#f60">4</span> |        <span style="color:#f60">0</span> |        <span style="color:#f60">1</span> |       <span style="color:#f60">2</span> | +,<span style="color:#f60">1</span>,a=<span style="color:#f60">1</span>~a=<span style="color:#f60">2</span> |
++--------+---------+----------+----------+---------+-------------+
+ 
+<span style="color:#ee82ee">void</span> mysqld_list_sql_filters(THD *thd)
+{
+  List&lt;Item&gt; field_list;
+ 
+  field_list.push_back(<span style="color:#f00">new</span> Item_empty_string(<span style="color:#87ceeb">&#34;type&#34;</span>, <span style="color:#f60">21</span>));
+  field_list.push_back(<span style="color:#f00">new</span> Item_return_int(<span style="color:#87ceeb">&#34;item_id&#34;</span>, <span style="color:#f60">21</span>, MYSQL_TYPE_LONGLONG));
+  field_list.push_back(<span style="color:#f00">new</span> Item_return_int(<span style="color:#87ceeb">&#34;cur_conc&#34;</span>, <span style="color:#f60">21</span>, MYSQL_TYPE_LONGLONG));
+  field_list.push_back(<span style="color:#f00">new</span> Item_return_int(<span style="color:#87ceeb">&#34;max_conc&#34;</span>, <span style="color:#f60">21</span>, MYSQL_TYPE_LONGLONG));
+  field_list.push_back(<span style="color:#f00">new</span> Item_return_int(<span style="color:#87ceeb">&#34;key_num&#34;</span>, <span style="color:#f60">21</span>, MYSQL_TYPE_LONGLONG));
+  field_list.push_back(<span style="color:#f00">new</span> Item_empty_string(<span style="color:#87ceeb">&#34;key_str&#34;</span>, SQL_FILTER_STR_LEN));
+ 
+  <span style="color:#f00">if</span> (thd-&gt;send_result_metadata(&amp;field_list, Protocol::SEND_NUM_ROWS | Protocol::SEND_EOF))
+        <span style="color:#f00">return</span>;
+ 
+  mysql_rwlock_rdlock(&amp;LOCK_filter_list);
+  <span style="color:#f00">if</span> (list_one_sql_filter(thd, select_filter_list, <span style="color:#87ceeb">&#34;SELECT&#34;</span>)
+          || list_one_sql_filter(thd, update_filter_list, <span style="color:#87ceeb">&#34;UPDATE&#34;</span>)
+          || list_one_sql_filter(thd, delete_filter_list, <span style="color:#87ceeb">&#34;DELETE&#34;</span>))
+  {
+        ;
+  }
+ 
+  mysql_rwlock_unlock(&amp;LOCK_filter_list);
+  my_eof(thd);
+}
+ 
+  <span style="color:#ee82ee">int</span> <span style="color:#ff0">list_one_sql_filter</span>(THD *thd, LIST *filter_list, <span style="color:#f00">const</span> <span style="color:#ee82ee">char</span> *type)
+{
+  CHARSET_INFO *cs= system_charset_info;
+  filter_item *item= NULL;
+  Protocol *protocol= thd-&gt;get_protocol();
+ 
+  <span style="color:#f00">while</span> (filter_list)
+  {
+        protocol-&gt;start_row();
+        item= (filter_item*)filter_list-&gt;data;
+        protocol-&gt;store(type, cs);
+        protocol-&gt;store((longlong)item-&gt;id);
+        protocol-&gt;store(__sync_fetch_and_add(&amp;(item-&gt;cur_conc), <span style="color:#f60">0</span>));
+        protocol-&gt;store(item-&gt;max_conc);
+        protocol-&gt;store((longlong)item-&gt;key_num);
+        protocol-&gt;store(item-&gt;orig_str, cs);
+ 
+        <span style="color:#f00">if</span> (protocol-&gt;end_row())
+                <span style="color:#f00">return</span> <span style="color:#f60">1</span>; <span style="color:#0f0">//no cover line
+</span><span style="color:#0f0"></span> 
+        filter_list= filter_list-&gt;next;
+  }
+ 
+  <span style="color:#f00">return</span> <span style="color:#f60">0</span>;
+}
+</code></pre></div><h1 id="mysql-57的协议重构">
+  MySQL 5.7的协议重构
+  <a class="anchor" href="#mysql-57%e7%9a%84%e5%8d%8f%e8%ae%ae%e9%87%8d%e6%9e%84">#</a>
+</h1>
+<p>MySQL 5.7大幅重构了Protocol模块代码, 采用了OO的设计方式：<a href="https://dev.mysql.com/worklog/task/?id=7126">WL#7126: Refactoring of protocol class</a>：</p>
+<blockquote class="book-hint info">
+  <pre><code>New Protocol ``class` `hierarchy
+============================
+The ``new` `hierarchy consists of 4 classes:
+   Protocol
+      |
+   Protocol_classic
+      |
+      |---Protocol_text
+      |---Protocol_binary
+Protocol is an abstract ``class` `that defines the ``new` `API. Protocol_classic is
+ex-Protocol ``class``, implements core of both classic protocols - text and
+binary. Protocol_text and Protocol_binary are implementations of appropriate
+classic protocols.
+</code></pre>
+</blockquote>
+
+<p>Protocol作为一个注释丰满且只有纯虚函数的抽象类, 非常容易理顺protocol模块能够提供的API。细节实现主要在Protocol_classic中（所以上文的调用栈可以看到, 实际逻辑是走到Protocol_classic中的）, 而逻辑上还划分出的两个类:</p>
+<ul>
+<li>Protocol_binary是Prepared Statements使用的协议</li>
+<li>Protocol_text<a href="https://dev.mysql.com/doc/internals/en/text-protocol.html">场景</a></li>
+</ul>
+<p>上面提到了MySQL 5.7.5引入的Deprecate EOF，实际上MySQL 5.7上对OK/EOF报文做了大量修改，使得client可以通过报文拿到更多的会话状态信息。方便中间层会话保持，主要涉及几个worklog：</p>
+<p><a href="https://dev.mysql.com/worklog/task/?id=4797">WL#4797: Extending protocol’s OK packet</a></p>
+<p><a href="https://dev.mysql.com/worklog/task/?id=6885">WL#6885: Flag to indicate session state</a></p>
+<p><a href="https://dev.mysql.com/worklog/task/?id=6128">WL#6128: Session Tracker: Add GTIDs context to the OK packet</a></p>
+<p><a href="https://dev.mysql.com/worklog/task/?id=6972">WL#6972: Collect GTIDs to include in the protocol’s OK packet</a></p>
+<p><a href="https://dev.mysql.com/worklog/task/?id=7766">WL#7766: Deprecate the EOF packet</a></p>
+<p><a href="https://dev.mysql.com/worklog/task/?id=6631">WL#6631: Detect transaction boundaries</a></p>
+<p>同时新增变量控制报文行为:</p>
+<ul>
+<li>
+<p>session_track_schema = [ON | OFF]
+ON时, 如果session中变更了当前database, OK报文中回返回新的database</p>
+</li>
+<li>
+<p>session_track_state_change = [ON | OFF]
+ON时, 当发生会话环境改变时, 会给CLIENT返回一个FLAG(1)，会话环境变化包括：</p>
+<blockquote class="book-hint info">
+  <p>当前database</p>
+<p>系统变量</p>
+<p>User-defined 变量</p>
+<p>临时表的变更</p>
+<p>prepare xxx</p>
+
+</blockquote>
+
+<p>但是只通知变更发生，具体值是多少，还需要配合session_track_schema、session_track_system_variables使用，所以限制还是很多…</p>
+</li>
+<li>
+<p>session_track_system_variables = [“list of string, seperated bt ‘,’”]
+这个参数用来追踪的变量, 目前只有time_zone, autocommit, character_set_client, character_set_results, character_set_connection可选。当这些变量的值变动时，client可以收到variable_name: new_value的键值对</p>
+</li>
+<li>
+<p>session_track_gtids = [OFF | OWN_GTID | ALL_GTIDS]
+OWN_GTID：在会话中产生新GTIDs（当然只读操作不会后推GTID位点）时，以字符串形式返回新增的GTIDs
+ALL_GTIDS：在每个包中返回当前的executed_gtid值，但是这样报文的payload很高，不推荐</p>
+</li>
+<li>
+<p>session_track_transaction_info = [ON | OFF] 打开后, 通过标志位表示当前会话状态，有8bit可以表示状态信息（其中使用字符’_‘表示FALSE）：</p>
+<ul>
+<li>
+<p>T: 显示开启事务; I: 隐式开启事务（autocommit = 0）</p>
+</li>
+<li>
+<p>r: 有非事务表读</p>
+</li>
+<li>
+<p>R: 有事务表读</p>
+</li>
+<li>
+<p>w: 非事务表写</p>
+</li>
+<li>
+<p>W: 事务表写</p>
+</li>
+<li>
+<p>s: 不安全函数（比如 select uuid()）</p>
+</li>
+<li>
+<p>S: server返回结果集</p>
+</li>
+<li>
+<p>L: 显示锁表(LOCK TABLES) 一个事务内，返回的状态值是累加的</p>
+<p>示例 表t1是InnoDB，表t2是MyISAM</p>
+<pre><code>START TRANSACTION;               // T_______
+INSERT INTO t1 VALUES (1);       // T___W___
+INSERT INTO t2 VALUES (1);       // T__wW___
+SELECT f1 FROM t1;               // T_RwW_S_
+...
+COMMIT/ROLLBACK;
+</code></pre></li>
+</ul>
+</li>
+</ul>
+<p>OK和EOF报文在MySQL 5.6上是走不同的逻辑构造报文，但实际上都是返回一些执行状态。MySQL 5.7中的Deprecated EOF报文，实际上是复用了OK报文中新增的状态，但是实际上这两个报文还是不同的：</p>
+<p>OK Packet：  header = 0 and length of packet &gt; 7</p>
+<p>EOF Packet：header = 0xfe and length of packet &lt; 9</p>
+<p>只是复用了在<code>net_send_ok</code>里的扩充逻辑。</p>
+<p>有了以上这些信息，我们可以做很多中间层的开发工作，比如读写分离就用状态追踪对外提供透明的读写分离。</p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#读取query">读取query</a></li>
+    <li><a href="#回包">回包</a>
+      <ul>
+        <li><a href="#ok-packet">OK Packet</a></li>
+        <li><a href="#error-packet">Error Packet</a></li>
+        <li><a href="#结果集包">结果集包</a></li>
+      </ul>
+    </li>
+    <li><a href="#mysql-57的协议重构">MySQL 5.7的协议重构</a></li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
