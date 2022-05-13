@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Rick&#39;s Blog</title>
+    <link>https://ayalastrike.github.io/docs/MySQL/Server/</link>
+    <description>Recent content on Rick&#39;s Blog</description>
+    <generator>Hugo -- gohugo.io</generator><atom:link href="https://ayalastrike.github.io/docs/MySQL/Server/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/connection_handler/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/connection_handler/</guid>
+      <description>概述 #  在MySQL中，对于client发来的请求，其处理流程分为建链和请求处理两部分，这两个阶段分别称为connection phase和command phase。
+MySQL的server-client protocol交互如下：</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/startup/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/startup/</guid>
+      <description>MySQL启动过程
+main() // 入口 sql/main.cc mysqld_main() // sql/mysqld.cc // 记录入参 my_progname = argv[0]; orig_argc = argc; orig_argv = argv; // 处理配置文件my.cnf及启动参数 load_defaults(MYSQL_CONFIG_NAME, load_default_groups, &amp;amp;argc, &amp;amp;argv, &amp;amp;argv_alloc); // 继续处理启动参数，为初始化系统表做准备 sys_var::m_parse_flag == PARSE_EARLY handle_early_options(); // 为status统计计数做准备 init_sql_statement_names(); // 初始化system variables哈希表,链表sys_var_chain sys_var,遍历链表后,加入到system_variable_hash哈希表 // sys_var_chain链表已经通过sys_vars.cc的sys_var()构造函数static初始化 sys_var_init(); // 计算打开文件数并初始化table cache adjust_related_options(&amp;amp;requested_open_files); // init error log global variables init_error_log(); // init audit global variables mysql_audit_initialize(); // 初始化query log和slow log query_logger.init(); // 初始化system variables init_common_variables(); default_storage_engine= const_cast&amp;lt;char *&amp;gt;(&amp;quot;InnoDB&amp;quot;); // 设置默认storage engine add_status_vars(status_vars); // 初始化status变量(show status), status_vars为全局变量 set_server_version(); get_options(&amp;amp;remaining_argc, &amp;amp;remaining_argv); // sys_var::m_parse_flag == PARSE_NORMAL // 设置thread_cache_size init_client_errs(); // 读出给client返回出错信息的文件 lex_init(); // 初始化词法分析 item_create_init(); // 初始化函数列表 func_array为全局变量 // 设置默认字符集和校验字符集 global_system_variables.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/ThreadPool/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/ThreadPool/</guid>
+      <description></description>
+    </item>
+    
+  </channel>
+</rss>

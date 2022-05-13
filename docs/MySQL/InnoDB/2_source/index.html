@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="typora-root-url: ../../../../static
+在MySQL源代码中，每个模块都有自己单独的目录存放，里面按照模块名0子模块名.cc来组织。所有头文件都放在include目录下，同时include目录下还有*.ic的文件，这个文件中存放定义的内联函数。
+如果要在*.ic中使用宏UNIV_INLINE定义内联，需要#include &ldquo;univ.i&rdquo;，即
+#include &#34;univ.i&#34;UNIV_INLINE return_value function foo(param1, ...) ``// 函数声明或实现 { ``... } 注意，这种风格只是适用于c函数，对于ic文件中的类成员函数定义，还是需要手动写inline  univ.i中UNIV_INLINE的宏定义
+#ifndef UNIV_MUST_NOT_INLINE /* Definition for inline version */ #define UNIV_INLINE static inline #else /* !UNIV_MUST_NOT_INLINE *//* If we want to compile a noninlined version we use the following macro definitions: */ #define UNIV_NONINL #define UNIV_INLINE #endif /* !UNIV_MUST_NOT_INLINE */阅读源码层次
+推荐从下至上进行逐层阅读
+最下一层是基础管理模块：
+ File Manager主要封装了InnoDB对于文件的各类操作，如读、写、异步I/O等。 Concurrency Manager模块主要封装了引擎内部使用的各类mutex和latch。 Common Utility模块用于一些基本数据结构与算法的定义，如链表、哈希表等。  图中间虚线标注的部分为InnoDB的内核实现，也就是InnoDB存储引擎中的事务、锁、缓冲区、日志、存储管理、资源管理、索引、change buffer模块，这部分是整个存储引擎的核心。">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="typora-root-url: ../../../../static
+在MySQL源代码中，每个模块都有自己单独的目录存放，里面按照模块名0子模块名.cc来组织。所有头文件都放在include目录下，同时include目录下还有*.ic的文件，这个文件中存放定义的内联函数。
+如果要在*.ic中使用宏UNIV_INLINE定义内联，需要#include &ldquo;univ.i&rdquo;，即
+#include &#34;univ.i&#34;UNIV_INLINE return_value function foo(param1, ...) ``// 函数声明或实现 { ``... } 注意，这种风格只是适用于c函数，对于ic文件中的类成员函数定义，还是需要手动写inline  univ.i中UNIV_INLINE的宏定义
+#ifndef UNIV_MUST_NOT_INLINE /* Definition for inline version */ #define UNIV_INLINE static inline #else /* !UNIV_MUST_NOT_INLINE *//* If we want to compile a noninlined version we use the following macro definitions: */ #define UNIV_NONINL #define UNIV_INLINE #endif /* !UNIV_MUST_NOT_INLINE */阅读源码层次
+推荐从下至上进行逐层阅读
+最下一层是基础管理模块：
+ File Manager主要封装了InnoDB对于文件的各类操作，如读、写、异步I/O等。 Concurrency Manager模块主要封装了引擎内部使用的各类mutex和latch。 Common Utility模块用于一些基本数据结构与算法的定义，如链表、哈希表等。  图中间虚线标注的部分为InnoDB的内核实现，也就是InnoDB存储引擎中的事务、锁、缓冲区、日志、存储管理、资源管理、索引、change buffer模块，这部分是整个存储引擎的核心。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/InnoDB/2_source/" /><meta property="article:section" content="docs" />
+
+
+
+<title>2 Source | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.06aaf5c4c8eb2303238ee8d35d2de99e7b3dad42ce849c862d0379482b8d8816.js" integrity="sha256-Bqr1xMjrIwMjjujTXS3pnns9rULOhJyGLQN5SCuNiBY=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a></li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/"class=active>源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>2 Source</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#代码风格">代码风格</a></li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><p>typora-root-url: ../../../../static</p>
+<p>在MySQL源代码中，每个模块都有自己单独的目录存放，里面按照模块名0子模块名.cc来组织。所有头文件都放在include目录下，同时include目录下还有*.ic的文件，这个文件中存放定义的内联函数。</p>
+<p>如果要在*.ic中使用宏UNIV_INLINE定义内联，需要#include &ldquo;univ.i&rdquo;，即</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">#include</span> <span style="color:#75715e">&#34;univ.i&#34;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>UNIV_INLINE
+return_value
+function <span style="color:#a6e22e">foo</span>(param1, ...) <span style="color:#960050;background-color:#1e0010">``</span><span style="color:#75715e">// 函数声明或实现
+</span><span style="color:#75715e"></span>{
+  <span style="color:#960050;background-color:#1e0010">``</span>...
+}
+</code></pre></div><blockquote class="book-hint info">
+  注意，这种风格只是适用于c函数，对于ic文件中的类成员函数定义，还是需要手动写inline
+</blockquote>
+
+<p><strong>univ.i中UNIV_INLINE的宏定义</strong></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">#ifndef UNIV_MUST_NOT_INLINE
+</span><span style="color:#75715e"></span><span style="color:#75715e">/* Definition for inline version */</span>
+<span style="color:#75715e">#define UNIV_INLINE static inline
+</span><span style="color:#75715e">#else </span><span style="color:#75715e">/* !UNIV_MUST_NOT_INLINE */</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span><span style="color:#75715e">/* If we want to compile a noninlined version we use the following macro definitions: */</span>
+<span style="color:#75715e">#define UNIV_NONINL
+</span><span style="color:#75715e">#define UNIV_INLINE
+</span><span style="color:#75715e">#endif </span><span style="color:#75715e">/* !UNIV_MUST_NOT_INLINE */</span><span style="color:#75715e">
+</span></code></pre></div><p>阅读源码层次</p>
+<p>推荐从下至上进行逐层阅读</p>
+<p><img src="/InnoDB%e5%ad%98%e5%82%a8%e5%bc%95%e6%93%8e%e4%bb%a3%e7%a0%81%e6%a8%a1%e5%9d%97%e5%88%92%e5%88%86.png" alt="InnoDB存储引擎代码模块划分" /></p>
+<p>最下一层是基础管理模块：</p>
+<ul>
+<li>File Manager主要封装了InnoDB对于文件的各类操作，如读、写、异步I/O等。</li>
+<li>Concurrency Manager模块主要封装了引擎内部使用的各类mutex和latch。</li>
+<li>Common Utility模块用于一些基本数据结构与算法的定义，如链表、哈希表等。</li>
+</ul>
+<p>图中间虚线标注的部分为InnoDB的内核实现，也就是InnoDB存储引擎中的事务、锁、缓冲区、日志、存储管理、资源管理、索引、change buffer模块，这部分是整个存储引擎的核心。</p>
+<p>图最上面的两层是接口层，通过这些接口实现server层与存储引擎的交互。InnoDB存储引擎可以不依赖MySQL数据库，而作为一个嵌入式数据库存在，因此还存在嵌入式的API接口。</p>
+<p>详细的目录（模块）说明如下：</p>
+<table>
+<thead>
+<tr>
+<th>目录</th>
+<th>说明</th>
+<th>文件</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ut</td>
+<td>基本数据结构和算法</td>
+<td>ut0byte<!-- raw HTML omitted -->ut0crc32<!-- raw HTML omitted -->ut0dbg<!-- raw HTML omitted --><!-- raw HTML omitted -->ut0listut0lstut0memut0newut0rbtut0rndut0vecut0wqueue</td>
+<td>内存双向链表 ib_list内存双向链表 ut_list</td>
+</tr>
+<tr>
+<td>mem</td>
+<td>内存管理</td>
+<td>mem0mem</td>
+<td>内存管理</td>
+</tr>
+<tr>
+<td>os</td>
+<td>进程控制</td>
+<td>univos0atomicos0eventos0fileos0procos0thread</td>
+<td>定义了POD、编译器hint、代码段宏Atomic Read-Modify-WriteOS Event getpid、大页分配内存PSI key、进程控制原语</td>
+</tr>
+<tr>
+<td>sync</td>
+<td>同步机制</td>
+<td>ut0mutexsync0arrsync0debugsync0rwsync0syncsync0policy</td>
+<td>定义了mutex的宏、mutex_init()和mutex_destroy()、MutexMonitor   MutexDebug</td>
+</tr>
+<tr>
+<td>log</td>
+<td>日志及恢复</td>
+<td>log0loglog0recv</td>
+<td>重做日志恢复</td>
+</tr>
+<tr>
+<td>mtr</td>
+<td>mini-transaction</td>
+<td>mtr0typemtr0mtrmtr0logdyn0buf</td>
+<td>mtr相关定义mtr基本操作mtr日志操作mtr_buf_t</td>
+</tr>
+<tr>
+<td>fsp</td>
+<td>存储管理</td>
+<td>fsp0filefsp0fspfsp0spacefsp0sysspace</td>
+<td>数据文件物理文件结构与实现表空间系统表空间</td>
+</tr>
+<tr>
+<td>fil</td>
+<td>文件管理</td>
+<td>fil0filos0file</td>
+<td>文件内存数据结构及相关文件操作底层文件操作实现</td>
+</tr>
+<tr>
+<td>fut</td>
+<td></td>
+<td>fut0lstfut0fut</td>
+<td>磁盘双向链表 flst</td>
+</tr>
+<tr>
+<td>data</td>
+<td>逻辑记录</td>
+<td>data0datadata0typedata0types</td>
+<td>逻辑记录逻辑记录的操作逻辑记录数据结构</td>
+</tr>
+<tr>
+<td>rem</td>
+<td>物理记录</td>
+<td>rem0recrem0cmprem0types</td>
+<td>物理记录物理记录的比较物理记录数据结构</td>
+</tr>
+<tr>
+<td>page</td>
+<td>索引页</td>
+<td>page0curpage0pagepage0typespage0sizepage0zip</td>
+<td>索引页中记录的定位、插入、删除索引页的维护类型定义</td>
+</tr>
+<tr>
+<td>lock</td>
+<td>锁</td>
+<td>lock0locklock0iterlock0prdtlock0waitlock0typeslock0priv</td>
+<td>锁模式</td>
+</tr>
+<tr>
+<td>btr</td>
+<td>B+树</td>
+<td>btr0btrbtr0bulkbtr0curbtr0pcurbtr0sea</td>
+<td></td>
+</tr>
+<tr>
+<td>buf</td>
+<td>缓冲池</td>
+<td>buf0buddybuf0bufbuf0checksumbuf0dblwrbuf0dumpbuf0flubuf0lrubuf0rea</td>
+<td></td>
+</tr>
+<tr>
+<td>dict</td>
+<td>数据字典</td>
+<td>dict0bootdict0creadict0dictdict0loaddict0memdict0statsdict0stats_bg</td>
+<td></td>
+</tr>
+<tr>
+<td>ibuf</td>
+<td>change buffer</td>
+<td>ibuf0ibuf</td>
+<td></td>
+</tr>
+<tr>
+<td>row</td>
+<td></td>
+<td>row0extrow0ftsortrow0importrow0insrow0logrow0mergerow0mysqlrow0purgerow0quiescerow0rowrow0selrow0truncrow0uninsrow0umodrow0undorow0updrow0vars</td>
+<td></td>
+</tr>
+<tr>
+<td>trx</td>
+<td>事务</td>
+<td>trx0i_strx0purgetrx0rectrx0rolltrx0rsegtrx0systrx0trxtrx0undo</td>
+<td></td>
+</tr>
+<tr>
+<td>handler</td>
+<td></td>
+<td>ha_innodbha_innoparthandler0alteri_s</td>
+<td></td>
+</tr>
+<tr>
+<td>read</td>
+<td></td>
+<td>read0read</td>
+<td></td>
+</tr>
+<tr>
+<td>api</td>
+<td></td>
+<td>api0apiapi0misc</td>
+<td></td>
+</tr>
+<tr>
+<td>eval</td>
+<td></td>
+<td>eval0evaleval0misc</td>
+<td></td>
+</tr>
+<tr>
+<td>ha</td>
+<td></td>
+<td>ha0haha0storagehash0hash</td>
+<td></td>
+</tr>
+<tr>
+<td>mach</td>
+<td></td>
+<td>mach0data</td>
+<td></td>
+</tr>
+<tr>
+<td>pars</td>
+<td></td>
+<td>lexyypars0grmpars0lexpars0optpars0parspars0sym</td>
+<td></td>
+</tr>
+<tr>
+<td>que</td>
+<td></td>
+<td>que0que</td>
+<td></td>
+</tr>
+<tr>
+<td>srv</td>
+<td></td>
+<td>srv0concsrv0monsrv0srvsrv0start</td>
+<td></td>
+</tr>
+<tr>
+<td>usr</td>
+<td></td>
+<td>usr0sess</td>
+<td></td>
+</tr>
+<tr>
+<td>gis</td>
+<td></td>
+<td>gis0geogis0rtreegis0sea</td>
+<td></td>
+</tr>
+<tr>
+<td>fts</td>
+<td></td>
+<td>fts0astfts0blexfts0configfts0ftsfts0optfts0parsfts0pluginfts0quefts0sqlfts0tlex</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>目录</th>
+<th>文件</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fut</td>
+<td>fut0fut</td>
+<td>File-based utilities</td>
+</tr>
+<tr>
+<td>fu0lst</td>
+<td>File-based list utilities</td>
+<td></td>
+</tr>
+<tr>
+<td>ha</td>
+<td>ha0ha</td>
+<td>The hash table with external chains</td>
+</tr>
+<tr>
+<td>ha0storage</td>
+<td>Hash storage</td>
+<td></td>
+</tr>
+<tr>
+<td>hash0hash</td>
+<td>The simple hash table utility</td>
+<td></td>
+</tr>
+<tr>
+<td>mem</td>
+<td>mem0mem</td>
+<td>The memory management</td>
+</tr>
+<tr>
+<td>ut</td>
+<td>ut0byte</td>
+<td>Byte utilities</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>ut0crc32</td>
+<td>CRC32</td>
+<td></td>
+</tr>
+<tr>
+<td>ut0dbg</td>
+<td>Debug utilities for Innobase.</td>
+<td></td>
+</tr>
+<tr>
+<td>ut0list</td>
+<td>A double-linked list</td>
+<td></td>
+</tr>
+<tr>
+<td>ut0mem</td>
+<td>Memory primitives</td>
+<td></td>
+</tr>
+<tr>
+<td>ut0new</td>
+<td>Instrumented memory allocator.</td>
+<td></td>
+</tr>
+<tr>
+<td>ut0rbt</td>
+<td>Red-Black tree implementation</td>
+<td></td>
+</tr>
+<tr>
+<td>ut0rnd</td>
+<td>Random numbers and hashing</td>
+<td></td>
+</tr>
+<tr>
+<td>ut0ut</td>
+<td>Various utilities for Innobase.</td>
+<td></td>
+</tr>
+<tr>
+<td>ut0vec</td>
+<td>A vector of pointers to data items</td>
+<td></td>
+</tr>
+<tr>
+<td>ut0wqueue</td>
+<td>work queue.</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>db0err Error Codes</p>
+<p>eval</p>
+<pre><code>File Name   What Name Stands For  Size    Comment Inside File ---------   --------------------  ------  ------------------- eval0eval.c Evaluating/Evaluating 17,061  SQL evaluator eval0proc.c Evaluating/Procedures  5,001  Executes SQL procedures
+</code></pre><p>The evaluating step is a late part of the process of interpreting an SQL statement &mdash; parsing has already occurred during \pars (PARSING).</p>
+<p>The ability to execute SQL stored procedures is an InnoDB feature, but MySQL handles stored procedures in its own way, so the eval0proc.c program is unimportant.</p>
+<h1 id="代码风格">
+  代码风格
+  <a class="anchor" href="#%e4%bb%a3%e7%a0%81%e9%a3%8e%e6%a0%bc">#</a>
+</h1>
+<p>InnoDB的代码缩进风格更接近于K&amp;R风格：所有的非函数语句块（if、switch、for、while、do），起始大括号放在行尾，而把结束大括号放在行首。函数开头的左花括号放到最左边。</p>
+<p>此外，每个文件都包含一段简短说明其功能的注释开头，同时每个函数也注释说明函数的功能，需要哪些种类的参数，参数可能值的含义以及用途。最后，对于变量的声明，使用下画线以分隔单词，坚持使用小写，并把大写字母留给宏和枚举常量。</p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#代码风格">代码风格</a></li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

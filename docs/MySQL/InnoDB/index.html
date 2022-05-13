@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="InnoDB存储引擎 #  从InnoDB的发展历史作为起点，了解InnoDB一路走来的历程。
+然后在全局视角下先了解整体的模块构成及其功能。
+再按照以下的路径深入细节：
+ 概览 源码结构 基本数据结构与算法 os records 索引页 storage management 同步机制 缓冲池 数据字典 B&#43;树索引 change buffer lock 事务处理 mini-transaction redo log 服务管理 row  一路下来，应该已经对各个模块的功能和细节了然于心，然后再回头再重温一下整体架构，做到融会贯通。">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/InnoDB/" />
+
+<title>Inno Db | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.06aaf5c4c8eb2303238ee8d35d2de99e7b3dad42ce849c862d0379482b8d8816.js" integrity="sha256-Bqr1xMjrIwMjjujTXS3pnns9rULOhJyGLQN5SCuNiBY=" crossorigin="anonymous"></script>
+<link rel="alternate" type="application/rss+xml" href="https://ayalastrike.github.io/docs/MySQL/InnoDB/index.xml" title="Rick's Blog" />
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a></li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/"class=active>InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>Inno Db</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#innodb存储引擎">InnoDB存储引擎</a></li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><h1 id="innodb存储引擎">
+  InnoDB存储引擎
+  <a class="anchor" href="#innodb%e5%ad%98%e5%82%a8%e5%bc%95%e6%93%8e">#</a>
+</h1>
+<p>从InnoDB的发展历史作为起点，了解InnoDB一路走来的历程。</p>
+<p>然后在全局视角下先了解整体的模块构成及其功能。</p>
+<p>再按照以下的路径深入细节：</p>
+<ul>
+<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=15040514">概览</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=14221316">源码结构</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=14221324">基本数据结构与算法</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/display/RH/os">os</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/display/RH/records">records</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=17170903">索引页</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/display/RH/storage&#43;management">storage management</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=15040528">同步机制</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=17171137">缓冲池</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=17171029">数据字典</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=17171046">B+树索引</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/display/RH/change&#43;buffer">change buffer</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/display/RH/lock">lock</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=17171150">事务处理</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/display/RH/mini-transaction">mini-transaction</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/display/RH/redo&#43;log">redo log</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=17171164">服务管理</a></li>
+<li><a href="http://ayalastrike.f3322.net:8090/display/RH/row">row</a></li>
+</ul>
+<p>一路下来，应该已经对各个模块的功能和细节了然于心，然后再回头再重温一下整体架构，做到融会贯通。</p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#innodb存储引擎">InnoDB存储引擎</a></li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

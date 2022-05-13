@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="MySQL启动过程
+main() // 入口 sql/main.cc mysqld_main() // sql/mysqld.cc // 记录入参 my_progname = argv[0]; orig_argc = argc; orig_argv = argv; // 处理配置文件my.cnf及启动参数 load_defaults(MYSQL_CONFIG_NAME, load_default_groups, &amp;argc, &amp;argv, &amp;argv_alloc); // 继续处理启动参数，为初始化系统表做准备 sys_var::m_parse_flag == PARSE_EARLY handle_early_options(); // 为status统计计数做准备 init_sql_statement_names(); // 初始化system variables哈希表,链表sys_var_chain sys_var,遍历链表后,加入到system_variable_hash哈希表 // sys_var_chain链表已经通过sys_vars.cc的sys_var()构造函数static初始化 sys_var_init(); // 计算打开文件数并初始化table cache adjust_related_options(&amp;requested_open_files); // init error log global variables init_error_log(); // init audit global variables mysql_audit_initialize(); // 初始化query log和slow log query_logger.init(); // 初始化system variables init_common_variables(); default_storage_engine= const_cast&lt;char *&gt;(&quot;InnoDB&quot;); // 设置默认storage engine add_status_vars(status_vars); // 初始化status变量(show status), status_vars为全局变量 set_server_version(); get_options(&amp;remaining_argc, &amp;remaining_argv); // sys_var::m_parse_flag == PARSE_NORMAL // 设置thread_cache_size init_client_errs(); // 读出给client返回出错信息的文件 lex_init(); // 初始化词法分析 item_create_init(); // 初始化函数列表 func_array为全局变量 // 设置默认字符集和校验字符集 global_system_variables.">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="MySQL启动过程
+main() // 入口 sql/main.cc mysqld_main() // sql/mysqld.cc // 记录入参 my_progname = argv[0]; orig_argc = argc; orig_argv = argv; // 处理配置文件my.cnf及启动参数 load_defaults(MYSQL_CONFIG_NAME, load_default_groups, &amp;argc, &amp;argv, &amp;argv_alloc); // 继续处理启动参数，为初始化系统表做准备 sys_var::m_parse_flag == PARSE_EARLY handle_early_options(); // 为status统计计数做准备 init_sql_statement_names(); // 初始化system variables哈希表,链表sys_var_chain sys_var,遍历链表后,加入到system_variable_hash哈希表 // sys_var_chain链表已经通过sys_vars.cc的sys_var()构造函数static初始化 sys_var_init(); // 计算打开文件数并初始化table cache adjust_related_options(&amp;requested_open_files); // init error log global variables init_error_log(); // init audit global variables mysql_audit_initialize(); // 初始化query log和slow log query_logger.init(); // 初始化system variables init_common_variables(); default_storage_engine= const_cast&lt;char *&gt;(&quot;InnoDB&quot;); // 设置默认storage engine add_status_vars(status_vars); // 初始化status变量(show status), status_vars为全局变量 set_server_version(); get_options(&amp;remaining_argc, &amp;remaining_argv); // sys_var::m_parse_flag == PARSE_NORMAL // 设置thread_cache_size init_client_errs(); // 读出给client返回出错信息的文件 lex_init(); // 初始化词法分析 item_create_init(); // 初始化函数列表 func_array为全局变量 // 设置默认字符集和校验字符集 global_system_variables." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/startup/" /><meta property="article:section" content="docs" />
+
+
+
+<title>Startup | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.06aaf5c4c8eb2303238ee8d35d2de99e7b3dad42ce849c862d0379482b8d8816.js" integrity="sha256-Bqr1xMjrIwMjjujTXS3pnns9rULOhJyGLQN5SCuNiBY=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/"class=active>MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a></li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>Startup</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents"></nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><p>MySQL启动过程</p>
+<pre><code>main() // 入口 sql/main.cc
+	mysqld_main() // sql/mysqld.cc
+
+		// 记录入参
+		my_progname = argv[0];
+		orig_argc = argc;
+		orig_argv = argv;
+
+		// 处理配置文件my.cnf及启动参数
+		load_defaults(MYSQL_CONFIG_NAME, load_default_groups, &amp;argc, &amp;argv, &amp;argv_alloc);
+
+		// 继续处理启动参数，为初始化系统表做准备 sys_var::m_parse_flag == PARSE_EARLY
+		handle_early_options();
+
+		// 为status统计计数做准备
+		init_sql_statement_names();
+
+		// 初始化system variables哈希表,链表sys_var_chain sys_var,遍历链表后,加入到system_variable_hash哈希表
+		// sys_var_chain链表已经通过sys_vars.cc的sys_var()构造函数static初始化
+		sys_var_init();
+
+		// 计算打开文件数并初始化table cache
+		adjust_related_options(&amp;requested_open_files);
+
+		// init error log global variables
+		init_error_log();
+
+		// init audit global variables
+		mysql_audit_initialize();
+
+		// 初始化query log和slow log
+		query_logger.init();
+
+		// 初始化system variables
+		init_common_variables();
+            default_storage_engine= const_cast&lt;char *&gt;(&quot;InnoDB&quot;); // 设置默认storage engine
+            add_status_vars(status_vars); // 初始化status变量(show status), status_vars为全局变量
+			set_server_version();
+			get_options(&amp;remaining_argc, &amp;remaining_argv); // sys_var::m_parse_flag == PARSE_NORMAL
+			// 设置thread_cache_size
+			init_client_errs(); // 读出给client返回出错信息的文件
+            lex_init(); // 初始化词法分析
+			item_create_init(); // 初始化函数列表 func_array为全局变量
+			// 设置默认字符集和校验字符集
+		    global_system_variables.collation_connection= default_charset_info;
+		    global_system_variables.character_set_results= default_charset_info;
+		    global_system_variables.character_set_client= default_charset_info;
+			// 设置默认storage engine
+			lex_init();
+
+		// 初始化信号量
+        my_init_signals();
+		// 启动核心模块
+		init_server_components();
+			mdl_init();					// mdl元数据锁
+			table_def_init(); 			// 表定义缓存
+			init_server_query_cache();	// Query Cache
+			init binlog relaylog		// Binlog Relaylog
+			gtid_server_init();			// GTID
+			plugin_register_builtin_and_init_core_se(); // Load builtin plugins, initialize MyISAM, CSV and InnoDB
+
+		// 初始化并创建GTID
+		init_server_auto_options();
+
+		// 初始化SSL
+		init_ssl();
+
+		// 初始化网络
+		network_init();
+
+		// 创建PID文件
+		create_pid_file();
+
+		// 初始化status variables
+		init_status_vars();
+
+		// binlog相关检查初始化
+		check_binlog_cache_size(NULL);
+		check_binlog_stmt_cache_size(NULL);
+		binlog_unsafe_map_init();
+
+		// 初始化Slave
+		init_slave();
+
+		// 创建线程处理信号量
+		start_signal_handler();
+
+		// 如果是安装初始化，创建handle_bootstrap线程进行初始化datadir,系统表
+		if (opt_bootstrap)
+			bootstrap(mysql_stdin);
+
+		// 创建manager线程
+		start_handle_manager();
+
+		// 执行DDL crash recovery
+		execute_ddl_log_recovery();
+
+		// 监听socket事件
+		mysqld_socket_acceptor-&gt;connection_event_loop();
+
+		if (signal_thread_id.thread != 0)
+			ret= my_thread_join(&amp;signal_thread_id, NULL);
+		clean_up(1);
+		mysqld_exit(MYSQLD_SUCCESS_EXIT);
+</code></pre><p>其中，load_defaults()会寻找my.cnf，并根据load_default_groups，使用search_default_file_with_ext()解析每一行配置，并进行标准化（配置项名称前加上&ndash;）</p>
+<pre><code>// sql/mysqld.cc
+2325 const char *load_default_groups[]= {
+...
+2329 &quot;mysqld&quot;,&quot;server&quot;, MYSQL_BASE_VERSION, 0, 0};
+ 
+// mysys_ssl/my_default.cc
+my_load_defaults
+	my_search_option_files
+		my_search_option_files
+		search_default_file_with_ext
+</code></pre><p>配置项会被handle_default_option()缓存在内存中</p>
+<pre><code>// mysys_ssl/my_default.cc handle_default_option()
+struct handle_option_ctx
+{
+   MEM_ROOT *alloc;
+   My_args *m_args;
+   TYPELIB *group;
+};
+</code></pre></article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents"></nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

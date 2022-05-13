@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="设计 #  MySQL主要面向的是OLTP场景，所以数据记录采用行存（NSM - n-ary storage model）。
+基于行进行存储有以下几个好处：
+ 记录存放在一个页中，存储一条记录需要访问的页面较少 符合传统机械硬盘的访问方式 易于理解，数据的存取就像是对一张二维表进行访问  在整体上看，表中的数据是按照如下形式组织的：
+那我们如何来理解记录呢？
+首先，在关系数据库系统理论中，通常用元组（tuple）描述记录，用字段（field）描述列，每个元组由多个字段组成，每个表由多个元组组成。
+行和元组在意义上是相等的。但是更愿意将行（row）理解为物理记录，将元组（tuple）理解为逻辑记录。物理记录为行实际存放在物理存储中的格式，其内容由二进制字符串组成，可读性差。逻辑记录则容易理解的多，每张表中的多个记录就像是一个数组。由于其只是“逻辑”上的含义，因此逻辑记录只是物理记录在内存中的表现形式，实际并不占用任何的物理存储空间。
+关系如下图所示：
+物理记录和逻辑记录的差异如下：
+    物理记录 逻辑记录     可读性 差 好   存储位置 磁盘 内存   亲和性 对存储友好（更紧凑） 对查找友好（更易寻址）   存储内容 除记录中的列数据外，还有一些额外信息 元组    这两种记录之间本身可以互相转换。比如，在插入一条记录时，原来没有数据，首先需要根据插入的记录构造一个逻辑记录，然后再存放到磁盘上。对于读取，要从磁盘上seek出来相应的数据页，再将页中的物理记录转换成逻辑记录展现给用户。
+除此之外，在MySQL server层也需要在binlog中记录数据的变化，也需要一种行格式。因此，在MySQL中，行格式一共有3种存储方式：
+ Server层格式：与存储引擎无关，server层的binlog行格式（Row-Base Replication下的binlog格式） 逻辑记录格式：tuple，也称为索引元组格式（因为InnoDB是IOT）。在同一个表中，不同索引对应的元组是不同的 物理记录格式：record，也称为physical record  物理记录的设计 #  物理记录承载着数据的最终存储，因此，我们首先讨论物理记录。
+磁盘上的物理记录需要面向计算机友好，更紧凑、强调IO性能，以及在此基础上支持事务语义。
+目标：
+ 描述行存的数据 适配存储引擎的结构 查找快 DML快 事务语义 更少的资源占用（disk、buffer pool、update I/O）  逻辑记录的设计 #  磁盘上的物理记录面向的是计算机友好的，更紧凑、高IO性能。同时，为了性能的考虑，数据也需要常驻内存（buffer pool），所以需要设计数据结构用于表述记录，这被称为tuple（元组），也称为逻辑记录。">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="设计 #  MySQL主要面向的是OLTP场景，所以数据记录采用行存（NSM - n-ary storage model）。
+基于行进行存储有以下几个好处：
+ 记录存放在一个页中，存储一条记录需要访问的页面较少 符合传统机械硬盘的访问方式 易于理解，数据的存取就像是对一张二维表进行访问  在整体上看，表中的数据是按照如下形式组织的：
+那我们如何来理解记录呢？
+首先，在关系数据库系统理论中，通常用元组（tuple）描述记录，用字段（field）描述列，每个元组由多个字段组成，每个表由多个元组组成。
+行和元组在意义上是相等的。但是更愿意将行（row）理解为物理记录，将元组（tuple）理解为逻辑记录。物理记录为行实际存放在物理存储中的格式，其内容由二进制字符串组成，可读性差。逻辑记录则容易理解的多，每张表中的多个记录就像是一个数组。由于其只是“逻辑”上的含义，因此逻辑记录只是物理记录在内存中的表现形式，实际并不占用任何的物理存储空间。
+关系如下图所示：
+物理记录和逻辑记录的差异如下：
+    物理记录 逻辑记录     可读性 差 好   存储位置 磁盘 内存   亲和性 对存储友好（更紧凑） 对查找友好（更易寻址）   存储内容 除记录中的列数据外，还有一些额外信息 元组    这两种记录之间本身可以互相转换。比如，在插入一条记录时，原来没有数据，首先需要根据插入的记录构造一个逻辑记录，然后再存放到磁盘上。对于读取，要从磁盘上seek出来相应的数据页，再将页中的物理记录转换成逻辑记录展现给用户。
+除此之外，在MySQL server层也需要在binlog中记录数据的变化，也需要一种行格式。因此，在MySQL中，行格式一共有3种存储方式：
+ Server层格式：与存储引擎无关，server层的binlog行格式（Row-Base Replication下的binlog格式） 逻辑记录格式：tuple，也称为索引元组格式（因为InnoDB是IOT）。在同一个表中，不同索引对应的元组是不同的 物理记录格式：record，也称为physical record  物理记录的设计 #  物理记录承载着数据的最终存储，因此，我们首先讨论物理记录。
+磁盘上的物理记录需要面向计算机友好，更紧凑、强调IO性能，以及在此基础上支持事务语义。
+目标：
+ 描述行存的数据 适配存储引擎的结构 查找快 DML快 事务语义 更少的资源占用（disk、buffer pool、update I/O）  逻辑记录的设计 #  磁盘上的物理记录面向的是计算机友好的，更紧凑、高IO性能。同时，为了性能的考虑，数据也需要常驻内存（buffer pool），所以需要设计数据结构用于表述记录，这被称为tuple（元组），也称为逻辑记录。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/InnoDB/5_record/" /><meta property="article:section" content="docs" />
+
+
+
+<title>5 Record | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.06aaf5c4c8eb2303238ee8d35d2de99e7b3dad42ce849c862d0379482b8d8816.js" integrity="sha256-Bqr1xMjrIwMjjujTXS3pnns9rULOhJyGLQN5SCuNiBY=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a></li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/"class=active>record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>5 Record</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#设计">设计</a>
+      <ul>
+        <li><a href="#物理记录的设计">物理记录的设计</a></li>
+        <li><a href="#逻辑记录的设计">逻辑记录的设计</a></li>
+      </ul>
+    </li>
+    <li><a href="#实现">实现</a>
+      <ul>
+        <li><a href="#21-redundant行格式">2.1 Redundant行格式</a>
+          <ul>
+            <li><a href="#211-sdfs">2.1.1 sdfs</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><h1 id="设计">
+  设计
+  <a class="anchor" href="#%e8%ae%be%e8%ae%a1">#</a>
+</h1>
+<p>MySQL主要面向的是OLTP场景，所以数据记录采用行存（NSM - n-ary storage model）。</p>
+<p>基于行进行存储有以下几个好处：</p>
+<ul>
+<li>记录存放在一个页中，存储一条记录需要访问的页面较少</li>
+<li>符合传统机械硬盘的访问方式</li>
+<li>易于理解，数据的存取就像是对一张二维表进行访问</li>
+</ul>
+<p>在整体上看，表中的数据是按照如下形式组织的：</p>
+<p><img src="/InnoDB_record%e8%a1%a8%e4%b8%ad%e7%9a%84%e8%a1%8c.png" alt="InnoDB record表中的行" /></p>
+<p>那我们如何来理解记录呢？</p>
+<p>首先，在关系数据库系统理论中，通常用元组（tuple）描述记录，用字段（field）描述列，每个元组由多个字段组成，每个表由多个元组组成。</p>
+<p>行和元组在意义上是相等的。但是更愿意将行（row）理解为物理记录，将元组（tuple）理解为逻辑记录。物理记录为行实际存放在物理存储中的格式，其内容由二进制字符串组成，可读性差。逻辑记录则容易理解的多，每张表中的多个记录就像是一个数组。由于其只是“逻辑”上的含义，因此逻辑记录只是物理记录在内存中的表现形式，实际并不占用任何的物理存储空间。</p>
+<p>关系如下图所示：</p>
+<p><img src="/InnoDB_record%e8%ae%b0%e5%bd%95%e7%9a%84%e5%b1%95%e7%8e%b0.png" alt="InnoDB record 记录的展现" /></p>
+<p>物理记录和逻辑记录的差异如下：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><strong>物理记录</strong></th>
+<th><strong>逻辑记录</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>可读性</td>
+<td>差</td>
+<td>好</td>
+</tr>
+<tr>
+<td>存储位置</td>
+<td>磁盘</td>
+<td>内存</td>
+</tr>
+<tr>
+<td>亲和性</td>
+<td>对存储友好（更紧凑）</td>
+<td>对查找友好（更易寻址）</td>
+</tr>
+<tr>
+<td>存储内容</td>
+<td>除记录中的列数据外，还有一些额外信息</td>
+<td>元组</td>
+</tr>
+</tbody>
+</table>
+<p>这两种记录之间本身可以互相转换。比如，在插入一条记录时，原来没有数据，首先需要根据插入的记录构造一个逻辑记录，然后再存放到磁盘上。对于读取，要从磁盘上seek出来相应的数据页，再将页中的物理记录转换成逻辑记录展现给用户。</p>
+<p>除此之外，在MySQL server层也需要在binlog中记录数据的变化，也需要一种行格式。因此，在MySQL中，行格式一共有3种存储方式：</p>
+<ul>
+<li>Server层格式：与存储引擎无关，server层的binlog行格式（Row-Base Replication下的binlog格式）</li>
+<li>逻辑记录格式：tuple，也称为索引元组格式（因为InnoDB是IOT）。在同一个表中，不同索引对应的元组是不同的</li>
+<li>物理记录格式：record，也称为physical record</li>
+</ul>
+<h2 id="物理记录的设计">
+  物理记录的设计
+  <a class="anchor" href="#%e7%89%a9%e7%90%86%e8%ae%b0%e5%bd%95%e7%9a%84%e8%ae%be%e8%ae%a1">#</a>
+</h2>
+<p>物理记录承载着数据的最终存储，因此，我们首先讨论物理记录。</p>
+<p>磁盘上的物理记录需要面向计算机友好，更紧凑、强调IO性能，以及在此基础上支持事务语义。</p>
+<p>目标：</p>
+<ul>
+<li>描述行存的数据</li>
+<li>适配存储引擎的结构</li>
+<li>查找快</li>
+<li>DML快</li>
+<li>事务语义</li>
+<li>更少的资源占用（disk、buffer pool、update I/O）</li>
+</ul>
+<p><img src="/InnoDB_record_physical_layout_design.png" alt="InnoDB record physical layout design" /></p>
+<h2 id="逻辑记录的设计">
+  逻辑记录的设计
+  <a class="anchor" href="#%e9%80%bb%e8%be%91%e8%ae%b0%e5%bd%95%e7%9a%84%e8%ae%be%e8%ae%a1">#</a>
+</h2>
+<p>磁盘上的物理记录面向的是计算机友好的，更紧凑、高IO性能。同时，为了性能的考虑，数据也需要常驻内存（buffer pool），所以需要设计数据结构用于表述记录，这被称为tuple（元组），也称为逻辑记录。</p>
+<h1 id="实现">
+  实现
+  <a class="anchor" href="#%e5%ae%9e%e7%8e%b0">#</a>
+</h1>
+<p>InnoDB存储引擎中的表使用的是索引组织表（<strong>I</strong>ndex <strong>O</strong>rganized <strong>T</strong>able - <strong>IOT</strong>），这意味着表中的所有数据是按照B+树的方式进行存储的，行数据存在在B+树的叶子节点上，即使创建表时没有显式指定主键索引，也会自动创建一个6字节的隐藏列，用作主键索引。</p>
+<h2 id="21-redundant行格式">
+  2.1 Redundant行格式
+  <a class="anchor" href="#21-redundant%e8%a1%8c%e6%a0%bc%e5%bc%8f">#</a>
+</h2>
+<p>从上面我们可以得知，物理记录由3部分组成：</p>
+<h3 id="211-sdfs">
+  2.1.1 sdfs
+  <a class="anchor" href="#211-sdfs">#</a>
+</h3>
+<p>sdfs</p>
+<p><img src="/ut0lst.png" alt="ut0lst" /></p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#设计">设计</a>
+      <ul>
+        <li><a href="#物理记录的设计">物理记录的设计</a></li>
+        <li><a href="#逻辑记录的设计">逻辑记录的设计</a></li>
+      </ul>
+    </li>
+    <li><a href="#实现">实现</a>
+      <ul>
+        <li><a href="#21-redundant行格式">2.1 Redundant行格式</a>
+          <ul>
+            <li><a href="#211-sdfs">2.1.1 sdfs</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
