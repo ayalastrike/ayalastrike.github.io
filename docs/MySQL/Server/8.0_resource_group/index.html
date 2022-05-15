@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="ＭySQL8.0增加了一个新功能resource group，可以对不同的用户进行资源控制，例如对用户线程和后台系统线程给予不同的CPU优先级。
+用户可以通过SQL接口创建不同的分组，这些分组可以作为sql的hit，也可以动态的绑定过去。本文主要简单介绍下用法，至于底层如何实现的，其实比较简单：创建的分组被存储到系统表中；在linux系统底层通过CPU_SET来绑定CPU，通过setpriority来设置线程的nice值
+worklog: WL#9467: Resource Groups
+创建resource group #  系统自带两个resource group（不可修改）：
+ FOREGROUND (FG) - &ldquo;user&rdquo; threads BACKGROUND (BG) - &ldquo;system&rdquo; threads (internal Engine threads, e.g. &ldquo;purge&quot;in InnoDB, etc.)  mysql&gt; SELECT * FROM INFORMATION_SCHEMA.RESOURCE_GROUPS\G *************************** 1. row *************************** RESOURCE_GROUP_NAME: USR_default RESOURCE_GROUP_TYPE: USER RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 *************************** 2. row *************************** RESOURCE_GROUP_NAME: SYS_default RESOURCE_GROUP_TYPE: SYSTEM RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 2 rows in set (0.00 sec) 只有超级账户启动mysqld才能设置thread priority，否则只能降低而不能提升优先级。（-20最高，20最低）">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="ＭySQL8.0增加了一个新功能resource group，可以对不同的用户进行资源控制，例如对用户线程和后台系统线程给予不同的CPU优先级。
+用户可以通过SQL接口创建不同的分组，这些分组可以作为sql的hit，也可以动态的绑定过去。本文主要简单介绍下用法，至于底层如何实现的，其实比较简单：创建的分组被存储到系统表中；在linux系统底层通过CPU_SET来绑定CPU，通过setpriority来设置线程的nice值
+worklog: WL#9467: Resource Groups
+创建resource group #  系统自带两个resource group（不可修改）：
+ FOREGROUND (FG) - &ldquo;user&rdquo; threads BACKGROUND (BG) - &ldquo;system&rdquo; threads (internal Engine threads, e.g. &ldquo;purge&quot;in InnoDB, etc.)  mysql&gt; SELECT * FROM INFORMATION_SCHEMA.RESOURCE_GROUPS\G *************************** 1. row *************************** RESOURCE_GROUP_NAME: USR_default RESOURCE_GROUP_TYPE: USER RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 *************************** 2. row *************************** RESOURCE_GROUP_NAME: SYS_default RESOURCE_GROUP_TYPE: SYSTEM RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 2 rows in set (0.00 sec) 只有超级账户启动mysqld才能设置thread priority，否则只能降低而不能提升优先级。（-20最高，20最低）" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/8.0_resource_group/" /><meta property="article:section" content="docs" />
+
+<meta property="article:modified_time" content="2022-05-15T10:43:56&#43;08:00" />
+
+<title>8.0 Resource Group | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.01b86181b4c57573b5c15cbc0cfd48db7383e375502695b3f2d81d09e9b6bf39.js" integrity="sha256-AbhhgbTFdXO1wVy8DP1I23OD43VQJpWz8tgdCem2vzk=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化</a></li>
+<li><a href="/docs/MySQL/Server/8.0_resource_group/"class=active>MySQL 8.0 通过Resource Group来控制线程计算资源</a></li>
+<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+<li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>8.0 Resource Group</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#创建resource-group">创建resource group</a></li>
+    <li><a href="#使用resource-group">使用resource group</a></li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><p>ＭySQL8.0增加了一个新功能resource group，可以对不同的用户进行资源控制，例如对用户线程和后台系统线程给予不同的CPU优先级。</p>
+<p>用户可以通过SQL接口创建不同的分组，这些分组可以作为sql的hit，也可以动态的绑定过去。本文主要简单介绍下用法，至于底层如何实现的，其实比较简单：创建的分组被存储到系统表中；在linux系统底层通过CPU_SET来绑定CPU，通过setpriority来设置线程的nice值</p>
+<p>worklog: <a href="https://dev.mysql.com/worklog/task/?id=9467">WL#9467: Resource Groups</a></p>
+<h1 id="创建resource-group">
+  创建resource group
+  <a class="anchor" href="#%e5%88%9b%e5%bb%baresource-group">#</a>
+</h1>
+<p>系统自带两个resource group（不可修改）：</p>
+<ul>
+<li>FOREGROUND (FG) - &ldquo;user&rdquo; threads</li>
+<li>BACKGROUND (BG) - &ldquo;system&rdquo; threads (internal Engine threads, e.g. &ldquo;purge&quot;in InnoDB, etc.)</li>
+</ul>
+<pre><code>mysql&gt; SELECT * FROM INFORMATION_SCHEMA.RESOURCE_GROUPS\G
+*************************** 1. row ***************************
+RESOURCE_GROUP_NAME: USR_default
+RESOURCE_GROUP_TYPE: USER
+RESOURCE_GROUP_ENABLED: 1
+VCPU_IDS: 0-63
+THREAD_PRIORITY: 0
+*************************** 2. row ***************************
+RESOURCE_GROUP_NAME: SYS_default
+RESOURCE_GROUP_TYPE: SYSTEM
+RESOURCE_GROUP_ENABLED: 1
+VCPU_IDS: 0-63
+THREAD_PRIORITY: 0
+2 rows in set (0.00 sec)
+</code></pre><p>只有超级账户启动mysqld才能设置thread priority，否则只能降低而不能提升优先级。（-20最高，20最低）</p>
+<p>对于system threads，cpu priority只能从-20 ~ 0，user threads在0 ~ 19之间，这样就保证了系统线程的优先级肯定比用户线程高。</p>
+<h1 id="使用resource-group">
+  使用resource group
+  <a class="anchor" href="#%e4%bd%bf%e7%94%a8resource-group">#</a>
+</h1>
+<p>有两种方式来使用resource group，一种是SET RESOURCE GROUP，一种是通过SQL HINT的方式。</p>
+<p>设置当前session：</p>
+<pre><code>mysql&gt; SET RESOURCE GROUP test_user_rg;
+Query OK, 0 rows affected (0.00 sec)
+</code></pre><p>也可以指定hint的方式来设置：</p>
+<pre><code>mysql&gt; select /* + RESOURCE_GROUP(test_user_rg) */ * from sbtest1 where id &lt;10;
+</code></pre><p>还可以通过thread id来设置其他运行中的session，注意这里的thread id不是THD id，而是通过pthread id（performance_schema.threads表）。</p>
+<pre><code>mysql&gt; SELECT THREAD_ID, TYPE FROM performance_schema.threads WHERE PROCESSLIST_ID = 26\G
+*************************** 1. row ***************************
+THREAD_ID: 71
+TYPE: FOREGROUND
+1 row in set (0.00 sec)
+ 
+mysql&gt; SET RESOURCE GROUP test_user_rg for 71;
+Query OK, 0 rows affected (0.00 sec)
+</code></pre><p>可以看到，通过resource group，我们可以为任何线程指定不同的计算资源。</p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#创建resource-group">创建resource group</a></li>
+    <li><a href="#使用resource-group">使用resource group</a></li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="背景 #  在分布式环境下，异步网络是一个挑战，当遇到网络问题时，提供超时机制可以提升系统的可用性。并且，对于事务系统，锁机制也需要超时机制来保证资源可以在有限时间内释放，避免饥饿现象的产生。
+为此，MySQL在多种场景下提供了timeout机制。
+简单一句话，MySQL Protocol ping-pong模型各个节点都有超时检测  MySQL timeout配置 #  MySQL内有多种timeout，我们先看一下有多少：
+mysql&gt; show global variables like &#39;%timeout%&#39;; &#43;-----------------------------&#43;----------&#43; | Variable_name | Value | &#43;-----------------------------&#43;----------&#43; | connect_timeout | 5 | | net_read_timeout | 30 | | net_write_timeout | 60 | | wait_timeout | 28800 | | interactive_timeout | 28800 | | lock_wait_timeout | 31536000 | | innodb_lock_wait_timeout | 3 | | innodb_rollback_on_timeout | OFF | &#43;-----------------------------&#43;----------&#43; 通过阅读官方文档，结合我们在下面对于timeout实现的论证，这里先放上结论：
+网络超时">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="背景 #  在分布式环境下，异步网络是一个挑战，当遇到网络问题时，提供超时机制可以提升系统的可用性。并且，对于事务系统，锁机制也需要超时机制来保证资源可以在有限时间内释放，避免饥饿现象的产生。
+为此，MySQL在多种场景下提供了timeout机制。
+简单一句话，MySQL Protocol ping-pong模型各个节点都有超时检测  MySQL timeout配置 #  MySQL内有多种timeout，我们先看一下有多少：
+mysql&gt; show global variables like &#39;%timeout%&#39;; &#43;-----------------------------&#43;----------&#43; | Variable_name | Value | &#43;-----------------------------&#43;----------&#43; | connect_timeout | 5 | | net_read_timeout | 30 | | net_write_timeout | 60 | | wait_timeout | 28800 | | interactive_timeout | 28800 | | lock_wait_timeout | 31536000 | | innodb_lock_wait_timeout | 3 | | innodb_rollback_on_timeout | OFF | &#43;-----------------------------&#43;----------&#43; 通过阅读官方文档，结合我们在下面对于timeout实现的论证，这里先放上结论：
+网络超时" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/timeout/" /><meta property="article:section" content="docs" />
+
+<meta property="article:modified_time" content="2022-05-15T10:43:56&#43;08:00" />
+
+<title>Timeout | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.01b86181b4c57573b5c15cbc0cfd48db7383e375502695b3f2d81d09e9b6bf39.js" integrity="sha256-AbhhgbTFdXO1wVy8DP1I23OD43VQJpWz8tgdCem2vzk=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化</a></li>
+<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源</a></li>
+<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/timeout/"class=active>Timeout机制</a></li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+<li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>Timeout</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#背景">背景</a></li>
+    <li><a href="#mysql-timeout配置">MySQL timeout配置</a></li>
+    <li><a href="#实现细节">实现细节</a>
+      <ul>
+        <li><a href="#connect_timeout-net_read_timeout-net_write_timeout">connect_timeout net_read_timeout net_write_timeout</a></li>
+        <li><a href="#net_wait_timeout-net_interactive_timeout">net_wait_timeout net_interactive_timeout</a></li>
+        <li><a href="#lock_wait_timeout">lock_wait_timeout</a></li>
+      </ul>
+    </li>
+    <li><a href="#实践">实践</a></li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><h1 id="背景">
+  背景
+  <a class="anchor" href="#%e8%83%8c%e6%99%af">#</a>
+</h1>
+<p>在分布式环境下，异步网络是一个挑战，当遇到网络问题时，提供超时机制可以提升系统的可用性。并且，对于事务系统，锁机制也需要超时机制来保证资源可以在有限时间内释放，避免饥饿现象的产生。</p>
+<p>为此，MySQL在多种场景下提供了timeout机制。</p>
+<blockquote class="book-hint warning">
+  简单一句话，MySQL Protocol ping-pong模型各个节点都有超时检测
+</blockquote>
+
+<h1 id="mysql-timeout配置">
+  MySQL timeout配置
+  <a class="anchor" href="#mysql-timeout%e9%85%8d%e7%bd%ae">#</a>
+</h1>
+<p>MySQL内有多种timeout，我们先看一下有多少：</p>
+<pre><code>mysql&gt; show global variables like '%timeout%';
++-----------------------------+----------+
+| Variable_name               | Value    |
++-----------------------------+----------+
+| connect_timeout             | 5        |
+| net_read_timeout            | 30       |
+| net_write_timeout           | 60       |
+| wait_timeout                | 28800    |
+| interactive_timeout         | 28800    |
+| lock_wait_timeout           | 31536000 |
+| innodb_lock_wait_timeout    | 3        |
+| innodb_rollback_on_timeout  | OFF      |
++-----------------------------+----------+
+</code></pre><p>通过阅读官方文档，结合我们在下面对于timeout实现的论证，这里先放上结论：</p>
+<p>网络超时</p>
+<ul>
+<li><a href="https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_connect_timeout">connect_timeout</a>：在connection phase阶段超时</li>
+<li><a href="https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_net_read_timeout">net_read_timeout</a>：在comamnd phase阶段网络读超时</li>
+<li><a href="https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_net_write_timeout">net_write_timeout</a>：在comamnd phase阶段网络写超时</li>
+<li><a href="https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_wait_timeout">wait_timeout</a>、<a href="https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_interactive_timeout">interactive_timeout</a>：在connection phase结束后，在command phase节点，多长时间没有收到命令包。这里的wait_timeout和interactive_timeout的区别只是连接的种类不同，wait_timeout是对noninteractive的连接空闲超时，interactive_timeout是对interactive的连接空闲超时（客户端连接时设置了CLIENT_INTERACTIVE）</li>
+</ul>
+<p>总结一下：</p>
+<ul>
+<li>connection phase应用建链期间，没有收到client回复，connect_timeout</li>
+<li>command phase期间没有收到请求时，net_wait_timeout/net_interactive_timeout，当收到请求后，接受一次完整的请求间，如果出现网络读包超时，net_read_timeout，回包时写socket超时，net_write_timeout</li>
+</ul>
+<p>锁超时</p>
+<ul>
+<li><a href="https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_lock_wait_timeout">lock_wait_timeout</a>：获取mdl锁的超时时间</li>
+<li><a href="https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_lock_wait_timeout">innodb_lock_wait_timeout</a>：InnoDB中行锁等待的超时时间（对表锁无效）</li>
+<li><a href="https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_rollback_on_timeout">innodb_rollback_on_timeout</a>：当InnoDB锁等待超时后，OFF只rollback事务中的最后一条语句，ON则rollback整个事务</li>
+</ul>
+<p>timeout配置项的值范围</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">配置项</th>
+<th style="text-align:left">默认值</th>
+<th style="text-align:left">值范围</th>
+<th style="text-align:left">线上默认配置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">connect_timeout</td>
+<td style="text-align:left">10</td>
+<td style="text-align:left">2 ~ 1 year</td>
+<td style="text-align:left">10</td>
+</tr>
+<tr>
+<td style="text-align:left">net_read_timeout</td>
+<td style="text-align:left">30</td>
+<td style="text-align:left">1 ~ 1 year</td>
+<td style="text-align:left">30</td>
+</tr>
+<tr>
+<td style="text-align:left">net_write_timeout</td>
+<td style="text-align:left">60</td>
+<td style="text-align:left">1 ~ 1 year</td>
+<td style="text-align:left">60</td>
+</tr>
+<tr>
+<td style="text-align:left">wait_timeout</td>
+<td style="text-align:left">8 hour</td>
+<td style="text-align:left">1 ~ 1 year</td>
+<td style="text-align:left">28800</td>
+</tr>
+<tr>
+<td style="text-align:left">interactive_timeout</td>
+<td style="text-align:left">8 hour</td>
+<td style="text-align:left">1 ~ 1 year</td>
+<td style="text-align:left">28800</td>
+</tr>
+<tr>
+<td style="text-align:left">lock_wait_timeout</td>
+<td style="text-align:left">1 year</td>
+<td style="text-align:left">1 ~ 1 year</td>
+<td style="text-align:left">31536000</td>
+</tr>
+<tr>
+<td style="text-align:left">innodb_lock_wait_timeout</td>
+<td style="text-align:left">50</td>
+<td style="text-align:left">1 ~ 1073741824</td>
+<td style="text-align:left">5</td>
+</tr>
+<tr>
+<td style="text-align:left">innodb_rollback_on_timeout</td>
+<td style="text-align:left">OFF</td>
+<td style="text-align:left">ON/OFF</td>
+<td style="text-align:left">OFF</td>
+</tr>
+</tbody>
+</table>
+<h1 id="实现细节">
+  实现细节
+  <a class="anchor" href="#%e5%ae%9e%e7%8e%b0%e7%bb%86%e8%8a%82">#</a>
+</h1>
+<p>下面结合代码看一下这些timeout的具体含义。</p>
+<h2 id="connect_timeout-net_read_timeout-net_write_timeout">
+  connect_timeout net_read_timeout net_write_timeout
+  <a class="anchor" href="#connect_timeout-net_read_timeout-net_write_timeout">#</a>
+</h2>
+<pre><code>两处设置网络超时
+1. 网络初始化
+Protocol_classic::init_net
+mysql client
+    my_net_init
+        my_net_local_init
+            my_net_set_read_timeout
+            my_net_set_write_timeout
+                net-&gt;read_timeout = ...
+                net-&gt;write_timeout = ...
+2. 网络读写
+mysql client
+    vio_socket_connect  // 根据等待的连接事件（VIO_IO_EVENT_CONNECT）
+vio_read
+vio_write
+    vio_socket_io_wait  // 根据等待的读写事件（VIO_IO_EVENT_READ/VIO_IO_EVENT_WRITE）将select超时设置为vio-&gt;read_timeout或vio-&gt;write_timeout
+        vio_io_wait     // timeout:-1
+            select
+</code></pre><p>即</p>
+<ul>
+<li>在connection phase，将connect_timeout设置为net-&gt;vio-&gt;read_timeout/write_timeout</li>
+<li>在command phase，将net_read_timeout设置为net-&gt;vio-&gt;read_timeout，将net_write_timeoutnet-&gt;vio-&gt;write_timeout</li>
+</ul>
+<p>其实底层都是搞的select超时，然后通过以下调用链返回</p>
+<pre><code>vio-&gt;read
+    vio_read_buff
+    vio_read
+        mysql_socket_recv
+        vio_socket_io_wait
+            vio_io_wait
+                select
+vio-&gt;write
+    vio_write
+        mysql_socket_send
+        vio_socket_io_wait
+            vio_io_wait
+                select
+ 
+Protocol_classic::write
+    my_net_write
+    net_write_command
+    net_flush
+    net_write_buff
+        net_write_packet
+            net_write_raw_loop
+                vio-&gt;write
+</code></pre><p>当select超时时，返回-1，然后设置net-&gt;error = 2</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">  <span style="color:#0f0">/* On failure, propagate the error code. */</span>
+  <span style="color:#f00">if</span> (count)
+  {
+    <span style="color:#0f0">/* Socket should be closed. */</span>
+    net-&gt;error= <span style="color:#f60">2</span>;
+ 
+    <span style="color:#0f0">/* Interrupted by a timeout? */</span>
+    <span style="color:#f00">if</span> (vio_was_timeout(net-&gt;vio))
+      net-&gt;last_errno= ER_NET_WRITE_INTERRUPTED;
+    <span style="color:#f00">else</span>
+      net-&gt;last_errno= ER_NET_ERROR_ON_WRITE;
+ 
+<span style="color:#e5e5e5">#ifdef MYSQL_SERVER
+</span><span style="color:#e5e5e5"></span>    my_error(net-&gt;last_errno, MYF(<span style="color:#f60">0</span>));
+<span style="color:#e5e5e5">#endif
+</span><span style="color:#e5e5e5"></span>  }
+</code></pre></div><p>判断net-&gt;error是否为非零，非零意味着有错误，然后关闭连接。</p>
+<ul>
+<li>connection phase：close_connection</li>
+<li>command phase ：end_connection</li>
+</ul>
+<h2 id="net_wait_timeout-net_interactive_timeout">
+  net_wait_timeout net_interactive_timeout
+  <a class="anchor" href="#net_wait_timeout-net_interactive_timeout">#</a>
+</h2>
+<p>在从网络读命令包之前设置net_wait_timeout，然后在读完之后设置为net_read_timeout</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#ee82ee">bool</span> <span style="color:#ff0">do_command</span>(THD *thd) {
+  ...
+  <span style="color:#f00">if</span> (classic)
+  {
+    <span style="color:#0f0">/*
+</span><span style="color:#0f0">      This thread will do a blocking read from the client which
+</span><span style="color:#0f0">      will be interrupted when the next command is received from
+</span><span style="color:#0f0">      the client, the connection is closed or &#34;net_wait_timeout&#34;
+</span><span style="color:#0f0">      number of seconds has passed.
+</span><span style="color:#0f0">    */</span>
+    net= thd-&gt;get_protocol_classic()-&gt;get_net();
+    my_net_set_read_timeout(net, thd-&gt;variables.net_wait_timeout);
+    net_new_transaction(net);
+  }
+ 
+  rc= thd-&gt;get_protocol()-&gt;get_command(&amp;com_data, &amp;command);
+  thd-&gt;m_server_idle= false;
+  <span style="color:#f00">if</span> (classic)
+    my_net_set_read_timeout(net, thd-&gt;variables.net_read_timeout);
+ 
+  return_value= dispatch_command(thd, &amp;com_data, command);
+  ...
+}
+</code></pre></div><h2 id="lock_wait_timeout">
+  lock_wait_timeout
+  <a class="anchor" href="#lock_wait_timeout">#</a>
+</h2>
+<p>在获取mdl锁时设置等待时长</p>
+<pre><code>thd-&gt;mdl_context.acquire_locks(&amp;mdl_requests, thd-&gt;variables.lock_wait_timeout)
+</code></pre><h1 id="实践">
+  实践
+  <a class="anchor" href="#%e5%ae%9e%e8%b7%b5">#</a>
+</h1>
+<p>需要调整wait_timeout/interactive_timeout：</p>
+<pre><code>[Warning] Aborted connection 6 to db: 'unconnected' user: 'root' host: 'localhost' (Got timeout reading communication packets)
+</code></pre><p>需要调整net_write_timeout：</p>
+<pre><code>[Warning] Aborted connection 12 to db: 'test' user: 'root' host: 'localhost' (Got timeout writing communication packets)
+</code></pre><p>需要注意的是，MySQL的关于网络的错误，除了超时以外都认为是error，没有做进一步的细分，比如可能会看到下面这种日志，有可能是客户端异常退出了，也有可能是网络链路异常。</p>
+<pre><code>[Warning] Aborted connection 8 to db: 'unconnected' user: 'root' host: 'localhost' (Got an error reading communication packets)
+[Warning] Aborted connection 13 to db: 'test' user: 'root' host: 'localhost' (Got an error writing communication packets)
+</code></pre></article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#背景">背景</a></li>
+    <li><a href="#mysql-timeout配置">MySQL timeout配置</a></li>
+    <li><a href="#实现细节">实现细节</a>
+      <ul>
+        <li><a href="#connect_timeout-net_read_timeout-net_write_timeout">connect_timeout net_read_timeout net_write_timeout</a></li>
+        <li><a href="#net_wait_timeout-net_interactive_timeout">net_wait_timeout net_interactive_timeout</a></li>
+        <li><a href="#lock_wait_timeout">lock_wait_timeout</a></li>
+      </ul>
+    </li>
+    <li><a href="#实践">实践</a></li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

@@ -95,6 +95,39 @@ MySQL大事时间表：
     
     <item>
       <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/8.0_net_optimize/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/8.0_net_optimize/</guid>
+      <description>Administrative Connection Management #  如果MySQL连接连接被打满，有时甚至连root也无法登录去kill。
+对于这个问题，目前已有的解法有：
+ 各家的线程池提供了extra_port。 Alibaba RDS MySQL的做法是把connection的个数拆分成不同的使用目的，例如系统维护账户占用一部分，用户账户占用一部分，两者不互相影响。  MySQL 8.0提供了administrative-connection-interface的机制（由facebook贡献），即提供单独的network interface并且可以单独配置一个pthread用于listen。
+参数如下：
+ admin_address admin_port create_admin_listener_thread：是否创建一个单独的listener线程来监听admin的链接请求（默认OFF，建议打开）  worklog：WL#12138: Add Admin Port
+代码
+Multiple addresses for the –bind-address #  bind-address支持绑定多个网络地址。比如：
+// The server listens on the 198.51.100.20 IPv4 address and the 2001:db8:0:f101::1 IPv6 address. bind_address=198.51.100.20,2001:db8:0:f101::1 worklog：WL#11652: Support multiple addresses for the &amp;ndash;bind-address command option
+代码
+connect/disconnect performance #  目前MySQL里是使用一个全局大锁（LOCK_thd_list、LOCK_thd_remove）来保护thd_list。
+优化的思路其实很简单直接：分区，将LOCK_thd_list、LOCK_thd_remove根据thread id来分成8个分区（hardcode）来减少冲突，负面影响就是PS的监控数据需要聚合。
+worklog：WL#9250: Split LOCK_thd_list and LOCK_thd_remove mutexes</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/8.0_resource_group/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/8.0_resource_group/</guid>
+      <description>ＭySQL8.0增加了一个新功能resource group，可以对不同的用户进行资源控制，例如对用户线程和后台系统线程给予不同的CPU优先级。
+用户可以通过SQL接口创建不同的分组，这些分组可以作为sql的hit，也可以动态的绑定过去。本文主要简单介绍下用法，至于底层如何实现的，其实比较简单：创建的分组被存储到系统表中；在linux系统底层通过CPU_SET来绑定CPU，通过setpriority来设置线程的nice值
+worklog: WL#9467: Resource Groups
+创建resource group #  系统自带两个resource group（不可修改）：
+ FOREGROUND (FG) - &amp;ldquo;user&amp;rdquo; threads BACKGROUND (BG) - &amp;ldquo;system&amp;rdquo; threads (internal Engine threads, e.g. &amp;ldquo;purge&amp;quot;in InnoDB, etc.)  mysql&amp;gt; SELECT * FROM INFORMATION_SCHEMA.RESOURCE_GROUPS\G *************************** 1. row *************************** RESOURCE_GROUP_NAME: USR_default RESOURCE_GROUP_TYPE: USER RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 *************************** 2. row *************************** RESOURCE_GROUP_NAME: SYS_default RESOURCE_GROUP_TYPE: SYSTEM RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 2 rows in set (0.00 sec) 只有超级账户启动mysqld才能设置thread priority，否则只能降低而不能提升优先级。（-20最高，20最低）</description>
+    </item>
+    
+    <item>
+      <title></title>
       <link>https://ayalastrike.github.io/docs/MySQL/Server/connection_handler/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
@@ -112,6 +145,41 @@ TCP建链 #  TCP连接处理分为两步：
  初始化，创建conn_mgr和conn_handler，acceptor和listener 监听建链，由acceptor+listener负责 对已建链连接进行线程分发处理，由conn_mgr+conn_handler负责  整体流程如下图所示：
 代码实现
 mysqld_main init_common_variables Connection_handler_manager::init() // 初始化conn_mgr和conn_handler  network_init()	// 初始化网络 	set_ports();	// 设置port  // 初始化acceptor、listener 	Mysqld_socket_listener *mysqld_socket_listener= new (std::nothrow) Mysqld_socket_listener(bind_addr_str, mysqld_port, back_log, mysqld_port_timeout, unix_sock_name); Connection_acceptor&amp;lt;Mysqld_socket_listener&amp;gt; *mysqld_socket_acceptor= new (std::nothrow) Connection_acceptor&amp;lt;Mysqld_socket_listener&amp;gt;(mysqld_socket_listener); mysqld_socket_acceptor-&amp;gt;init_connection_acceptor(); .</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/</guid>
+      <description>MariaDB MaxScale 是一款数据库中间件，可以按照语义分发语句到多个数据库服务器上。它对应用程序透明，可以提供读写分离、负载均衡和高可用服务。
+proxy protocol 是 MaxScale 引入，为了解决使用proxy作为中间件连接mysql时，mysql获取client ip用 client通过proxy中间价连接mysql时，mysql server接收到认证报文中，包含的是proxy节点的IP。如果mysql.user表中指定了client的IP，无法通过认证。
+一种传统处理方式是在proxy节点上保存client的ip和密码，用于client的认证，而在mysql server上使用另一套ip和密码用于proxy 节点到mysql server的认证。
+MariaDB MaxScale引入了proxy protocol来解决client ip透传的问题。proxy节点获取到client ip后，把client ip包装在proxy protocol报文中发给server，server解析到了proxy protocol报文，再用报文中的ip替换proxy节点的ip
+因为 proxy protocol 本身不包含鉴权，同时可能影响数据库的鉴权行为，所以在数据库 server 端设置了一个ip白名单，只有白名单ip发送的 proxy protocol 报文才会被接受。
+报文格式 #  proxy protocol 有两个版本 v1 和 v2 通过报文签名区分
+v1 #  v1 报文是字符串形式 “PROXY %s %s %s %d %d”
+   字段 内容     签名 PROXY   %s.1 address family   %s.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/mdl/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/mdl/</guid>
+      <description>历史 #  为了解这个著名的bug#989：
+DML和DDL如果并发执行，binlog序错乱：主库并发执行了DDL（T → T&#39;）和DML（T’），但是提交到了binlog中顺序是DDL+DML，这样在从库上回放时，先执行DDL，后执行DML，但此时表结构已经变为T‘，DML执行失败  因此，在MySQL 5.5中，引入了MDL（Meta Data Lock）来控制DDL和DML的并发，保证元数据的一致性。
+设计思理：
+ WL#3726：DDL locking for all metadata objects WL#4284：Transactional DDL locking  谈到MDL，需要先谈谈MySQL的锁定机制设计以及thr_lock
+MySQL locking #  为了保证数据的一致性和完整性，数据库系统普遍存在封锁机制，而封锁机制的优劣直接关系到数据库系统的并发处理能力和性能，所以封锁机制的实现也成为了各种数据库的核心技术之一。
+MySQL的封锁机制有三种：
+ row-level locking：InnoDB、NDB Cluster table-level locking：MyISAM、MEMORY、MERGE、CSV等非事务存储引擎 page-level locking：BerkeleyDB  MySQL采用如此多样的封锁机制是由其产品定位和发展历史共同决定的。首先，MySQL的产品定位是通过plugin机制可以接入多个存储引擎。在早期的存储引擎（MyISAM和MEMORY）设计中，设计原则建立在&amp;quot;任何表在同一时刻都只允许单个线程（无论读写）对其访问&amp;quot;之上。随后，MySQL3.23修正了之前的假设：MyISAM支持Concurrent Insert：如果没有hole，可以多个读线程并发读同一张表，同时多个写线程以队列的形式进行尾部insert。之后，BerkeleyDB和InnoDB的引入也挑战了之前的设计假设，要求page-level、和row-level locking。此时，之前的设计方式已经和存储引擎所提供的能力不相衬了。因此MySQL做出了改变，允许存储引擎自己改变MySQL 通过接口传入的锁定类型（也就是上面的3种）而自行决定该怎样封锁数据。
+MySQL加锁的顺序
+SQL → open table → 加MDL锁 → 加表锁 → 加InnoDB锁 → SQL执行 → 释放MDL锁 → 释放表锁 → 释放InnoDB锁
+其中表锁是通过thr_lock提供的，在MySQL 5.7.5中，thr_lock被MDL替换：
+Scalability for InnoDB tables was improved by avoiding THR_LOCK locks.</description>
     </item>
     
     <item>
@@ -194,6 +262,19 @@ The THD is a large data structure which is used to keep track of various aspects
     
     <item>
       <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/timeout/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/timeout/</guid>
+      <description>背景 #  在分布式环境下，异步网络是一个挑战，当遇到网络问题时，提供超时机制可以提升系统的可用性。并且，对于事务系统，锁机制也需要超时机制来保证资源可以在有限时间内释放，避免饥饿现象的产生。
+为此，MySQL在多种场景下提供了timeout机制。
+简单一句话，MySQL Protocol ping-pong模型各个节点都有超时检测  MySQL timeout配置 #  MySQL内有多种timeout，我们先看一下有多少：
+mysql&amp;gt; show global variables like &#39;%timeout%&#39;; +-----------------------------+----------+ | Variable_name | Value | +-----------------------------+----------+ | connect_timeout | 5 | | net_read_timeout | 30 | | net_write_timeout | 60 | | wait_timeout | 28800 | | interactive_timeout | 28800 | | lock_wait_timeout | 31536000 | | innodb_lock_wait_timeout | 3 | | innodb_rollback_on_timeout | OFF | +-----------------------------+----------+ 通过阅读官方文档，结合我们在下面对于timeout实现的论证，这里先放上结论：
+网络超时</description>
+    </item>
+    
+    <item>
+      <title></title>
       <link>https://ayalastrike.github.io/docs/MySQL/Server/vio/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
@@ -212,7 +293,7 @@ The VIO routines are wrappers for the various network I/O calls that happen with
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/menu/</guid>
-      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning   NET VIO   Thread Pool   InnoDB  概览 源码结构 基本数据结构和算法 os record page      </description>
+      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning   NET VIO MySQL 8.0 对网络模块的优化 MySQL 8.0 通过Resource Group来控制线程计算资源 MariaDB MaxScale Proxy Protocol   Timeout机制 Thread Pool MDL   InnoDB  概览 源码结构 基本数据结构和算法 os record page      </description>
     </item>
     
   </channel>

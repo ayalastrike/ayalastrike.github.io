@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="MariaDB MaxScale 是一款数据库中间件，可以按照语义分发语句到多个数据库服务器上。它对应用程序透明，可以提供读写分离、负载均衡和高可用服务。
+proxy protocol 是 MaxScale 引入，为了解决使用proxy作为中间件连接mysql时，mysql获取client ip用 client通过proxy中间价连接mysql时，mysql server接收到认证报文中，包含的是proxy节点的IP。如果mysql.user表中指定了client的IP，无法通过认证。
+一种传统处理方式是在proxy节点上保存client的ip和密码，用于client的认证，而在mysql server上使用另一套ip和密码用于proxy 节点到mysql server的认证。
+MariaDB MaxScale引入了proxy protocol来解决client ip透传的问题。proxy节点获取到client ip后，把client ip包装在proxy protocol报文中发给server，server解析到了proxy protocol报文，再用报文中的ip替换proxy节点的ip
+因为 proxy protocol 本身不包含鉴权，同时可能影响数据库的鉴权行为，所以在数据库 server 端设置了一个ip白名单，只有白名单ip发送的 proxy protocol 报文才会被接受。
+报文格式 #  proxy protocol 有两个版本 v1 和 v2 通过报文签名区分
+v1 #  v1 报文是字符串形式 “PROXY %s %s %s %d %d”
+   字段 内容     签名 PROXY   %s.1 address family   %s.">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="MariaDB MaxScale 是一款数据库中间件，可以按照语义分发语句到多个数据库服务器上。它对应用程序透明，可以提供读写分离、负载均衡和高可用服务。
+proxy protocol 是 MaxScale 引入，为了解决使用proxy作为中间件连接mysql时，mysql获取client ip用 client通过proxy中间价连接mysql时，mysql server接收到认证报文中，包含的是proxy节点的IP。如果mysql.user表中指定了client的IP，无法通过认证。
+一种传统处理方式是在proxy节点上保存client的ip和密码，用于client的认证，而在mysql server上使用另一套ip和密码用于proxy 节点到mysql server的认证。
+MariaDB MaxScale引入了proxy protocol来解决client ip透传的问题。proxy节点获取到client ip后，把client ip包装在proxy protocol报文中发给server，server解析到了proxy protocol报文，再用报文中的ip替换proxy节点的ip
+因为 proxy protocol 本身不包含鉴权，同时可能影响数据库的鉴权行为，所以在数据库 server 端设置了一个ip白名单，只有白名单ip发送的 proxy protocol 报文才会被接受。
+报文格式 #  proxy protocol 有两个版本 v1 和 v2 通过报文签名区分
+v1 #  v1 报文是字符串形式 “PROXY %s %s %s %d %d”
+   字段 内容     签名 PROXY   %s.1 address family   %s." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/" /><meta property="article:section" content="docs" />
+
+<meta property="article:modified_time" content="2022-05-15T10:43:56&#43;08:00" />
+
+<title>Mariadb Maxscale Proxy Protocol | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.01b86181b4c57573b5c15cbc0cfd48db7383e375502695b3f2d81d09e9b6bf39.js" integrity="sha256-AbhhgbTFdXO1wVy8DP1I23OD43VQJpWz8tgdCem2vzk=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化</a></li>
+<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源</a></li>
+<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/"class=active>MariaDB MaxScale Proxy Protocol</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+<li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>Mariadb Maxscale Proxy Protocol</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#报文格式">报文格式</a>
+      <ul>
+        <li><a href="#v1">v1</a></li>
+        <li><a href="#v2">v2</a></li>
+      </ul>
+    </li>
+    <li><a href="#客户端改造">客户端改造</a></li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><p>MariaDB MaxScale 是一款数据库中间件，可以按照语义分发语句到多个数据库服务器上。它对应用程序透明，可以提供读写分离、负载均衡和高可用服务。</p>
+<p>proxy protocol 是 MaxScale 引入，为了解决使用proxy作为中间件连接mysql时，mysql获取client ip用 client通过proxy中间价连接mysql时，mysql server接收到认证报文中，包含的是proxy节点的IP。如果mysql.user表中指定了client的IP，无法通过认证。</p>
+<p>一种传统处理方式是在proxy节点上保存client的ip和密码，用于client的认证，而在mysql server上使用另一套ip和密码用于proxy 节点到mysql server的认证。</p>
+<p>MariaDB MaxScale引入了proxy protocol来解决client ip透传的问题。proxy节点获取到client ip后，把client ip包装在proxy protocol报文中发给server，server解析到了proxy protocol报文，再用报文中的ip替换proxy节点的ip</p>
+<p>因为 proxy protocol 本身不包含鉴权，同时可能影响数据库的鉴权行为，所以在数据库 server 端设置了一个ip白名单，只有白名单ip发送的 proxy protocol 报文才会被接受。</p>
+<h1 id="报文格式">
+  报文格式
+  <a class="anchor" href="#%e6%8a%a5%e6%96%87%e6%a0%bc%e5%bc%8f">#</a>
+</h1>
+<p>proxy protocol 有两个版本 v1 和 v2 通过报文签名区分</p>
+<h2 id="v1">
+  v1
+  <a class="anchor" href="#v1">#</a>
+</h2>
+<p>v1 报文是字符串形式 “PROXY %s %s %s %d %d”</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">字段</th>
+<th style="text-align:left">内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">签名</td>
+<td style="text-align:left">PROXY</td>
+</tr>
+<tr>
+<td style="text-align:left">%s.1</td>
+<td style="text-align:left">address family</td>
+</tr>
+<tr>
+<td style="text-align:left">%s.2</td>
+<td style="text-align:left">client address</td>
+</tr>
+<tr>
+<td style="text-align:left">%s.3</td>
+<td style="text-align:left">server address</td>
+</tr>
+<tr>
+<td style="text-align:left">%d.1</td>
+<td style="text-align:left">client port</td>
+</tr>
+<tr>
+<td style="text-align:left">%d.2</td>
+<td style="text-align:left">server port</td>
+</tr>
+</tbody>
+</table>
+<h2 id="v2">
+  v2
+  <a class="anchor" href="#v2">#</a>
+</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">字段</th>
+<th style="text-align:left">内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">报文签名12字节</td>
+<td style="text-align:left">\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A</td>
+</tr>
+<tr>
+<td style="text-align:left">ver_cmd 1 字节</td>
+<td style="text-align:left">version 高四位 0x2 « 4， command 0x1(PROXY) 0x0 (LOCAL)</td>
+</tr>
+<tr>
+<td style="text-align:left">family 1 字节</td>
+<td style="text-align:left">IPV4 0x11，IPV6 0x21，AF_UNIX 0x21</td>
+</tr>
+<tr>
+<td style="text-align:left">length 2字节</td>
+<td style="text-align:left">addr 部分的数据长度，IPV4 12， IPV6 36， AF_UNIX 216</td>
+</tr>
+<tr>
+<td style="text-align:left">addr 以IPV4为例</td>
+<td style="text-align:left">client地址4字节，server地址4字节，client port 2字节， server port 2字节</td>
+</tr>
+</tbody>
+</table>
+<h1 id="客户端改造">
+  客户端改造
+  <a class="anchor" href="#%e5%ae%a2%e6%88%b7%e7%ab%af%e6%94%b9%e9%80%a0">#</a>
+</h1>
+<p>MaxScale 使用场景下，Proxy Protocol Header 由 MaxScale 发送，这里暂不分析</p>
+<p>MariaDB 为了测试，也改造了 client，可以通过 mysql_option 设置 Proxy Protocol</p>
+<p>使用方法：在mysql_real_connect之前，调用 mysql_option</p>
+<p>mysql_optionsv(mysql, MARIADB_OPT_PROXY_HEADER, header_data, header_lengths);</p>
+<p>第一个参数是 MYSQL 句柄，第二个参数是 PROXY_HEADER 标志位，第三个参数是 Proxy Protocol Header，第四个参数是 Header length</p>
+<p>Proxy Protocol Header 按照上述规则传入即可</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#0f0">/* st_mysql_options_extension 结构体对应 mysql-&gt;options-&gt;extension */</span>
+<span style="color:#f00">struct</span> st_mysql_options_extension {
+  ...
+   
+  <span style="color:#0f0">/*  */</span>
+  <span style="color:#ee82ee">char</span> *proxy_header;
+  size_t proxy_header_len;
+}
+ 
+<span style="color:#ee82ee">int</span>
+<span style="color:#ff0">mysql_optionsv</span>(MYSQL *mysql,<span style="color:#f00">enum</span> mysql_option option, ...)
+{
+   ...
+   <span style="color:#f00">switch</span> (option) {
+     <span style="color:#f00">case</span> MARIADB_OPT_PROXY_HEADER:                                                                                                                                                                         
+     {
+       size_t arg2 = va_arg(ap, size_t);
+       <span style="color:#0f0">/* 把 proxy_header 和 proxy_header_len 保存到extension中 */</span>
+       OPT_SET_EXTENDED_VALUE(&amp;mysql-&gt;options, proxy_header, (<span style="color:#ee82ee">char</span> *)arg1);
+       OPT_SET_EXTENDED_VALUE(&amp;mysql-&gt;options, proxy_header_len, arg2);
+     }
+       <span style="color:#f00">break</span>;
+   }
+}
+ 
+<span style="color:#0f0">/*
+</span><span style="color:#0f0">  mysql_real_connect 过程中发送 proxy header
+</span><span style="color:#0f0">  发送时机在建连后，接收挑战码之前
+</span><span style="color:#0f0">  这样在鉴权时可以使用 proxy header 中保存的 ip port
+</span><span style="color:#0f0">*/</span>
+MYSQL *<span style="color:#ff0">mthd_my_real_connect</span>(MYSQL *mysql, <span style="color:#f00">const</span> <span style="color:#ee82ee">char</span> *host, <span style="color:#f00">const</span> <span style="color:#ee82ee">char</span> *user,
+                   <span style="color:#f00">const</span> <span style="color:#ee82ee">char</span> *passwd, <span style="color:#f00">const</span> <span style="color:#ee82ee">char</span> *db,
+                   uint port, <span style="color:#f00">const</span> <span style="color:#ee82ee">char</span> *unix_socket, <span style="color:#ee82ee">unsigned</span> <span style="color:#ee82ee">long</span> client_flag)
+{
+  ...
+   
+  <span style="color:#0f0">/* 如果extension中保存了 proxy_header，则把header发送给server */</span>
+  <span style="color:#f00">if</span> (mysql-&gt;options.extension &amp;&amp; mysql-&gt;options.extension-&gt;proxy_header)                                                                                                                                
+  {
+    <span style="color:#ee82ee">char</span> *hdr = mysql-&gt;options.extension-&gt;proxy_header;
+    size_t len = mysql-&gt;options.extension-&gt;proxy_header_len;
+    <span style="color:#f00">if</span> (ma_pvio_write(pvio, (<span style="color:#ee82ee">unsigned</span> <span style="color:#ee82ee">char</span> *)hdr, len) &lt;= <span style="color:#f60">0</span>)
+    {
+      ma_pvio_close(pvio);
+      <span style="color:#f00">goto</span> error;
+    }
+  }
+}
+</code></pre></div><p>服务端改造</p>
+<p>我们知道，server 通过对比自己的 net-&gt;pkt_nr 和 client 发送过来的 net-&gt;pkt_nr 来保证包没有乱序。而proxy header 没有包含正确的 pkt_nr，就可以通过判断 pkt_nr 乱序来识别 proxy header。</p>
+<p>对于一对client和server线程，pkt_nr是共享的。</p>
+<p>假设 server 发送的第一个包 pkt_nr == 1，下一个包是 client 回包 pkt_nr == 2，那么server再发给client 的包 pkt_nr == 3 以此类推。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#0f0">/*
+</span><span style="color:#0f0">  正常的 mysql 都包含4字节 header，前三字节是size，第四字节是 pkt_nr
+</span><span style="color:#0f0">*/</span>
+my_bool <span style="color:#ff0">my_net_write</span>(NET *net, <span style="color:#f00">const</span> uchar *packet, size_t len)
+{
+  ...
+ 
+  <span style="color:#0f0">/* 如果大于最大包长度，则分成多个包发送 */</span>
+  <span style="color:#f00">while</span> (len &gt;= MAX_PACKET_LENGTH)
+  {
+    <span style="color:#f00">const</span> ulong z_size = MAX_PACKET_LENGTH;
+  <span style="color:#0f0">/* 前三个字节保存size */</span>
+    int3store(buff, z_size);
+    <span style="color:#0f0">/* 第四字节保存pkt_nr */</span>
+    buff[<span style="color:#f60">3</span>]= (uchar) net-&gt;pkt_nr++;
+    <span style="color:#f00">if</span> (net_write_buff(net, buff, NET_HEADER_SIZE) ||
+        net_write_buff(net, packet, z_size))
+    {
+      MYSQL_NET_WRITE_DONE(<span style="color:#f60">1</span>);
+      <span style="color:#f00">return</span> <span style="color:#f60">1</span>;
+    }
+    packet += z_size;
+    len-=     z_size;
+  }
+  <span style="color:#0f0">/* Write last packet */</span>
+  int3store(buff,len);
+  buff[<span style="color:#f60">3</span>]= (uchar) net-&gt;pkt_nr++;
+ 
+  ...
+}
+ 
+<span style="color:#0f0">/* my_real_read 里面处理 proxy header */</span>
+<span style="color:#f00">static</span> ulong
+<span style="color:#ff0">my_real_read</span>(NET *net, size_t *complen,
+             my_bool header __attribute__((unused)))
+{
+retry:
+    <span style="color:#0f0">/* 收到的包不满足 pkt_nr 约束，可能是 proxy header，跳转到 packets_out_of_order */</span>
+    <span style="color:#f00">if</span> (net-&gt;buff[net-&gt;where_b + <span style="color:#f60">3</span>] != (uchar) net-&gt;pkt_nr)
+      <span style="color:#f00">goto</span> packets_out_of_order;
+      
+packets_out_of_order:
+  <span style="color:#0f0">/*
+</span><span style="color:#0f0">    判断是否是 proxy protocol header
+</span><span style="color:#0f0">    判断标准是报文前几位是否符合 proxy protocol header 的 signature
+</span><span style="color:#0f0">    前面已经提到
+</span><span style="color:#0f0">      v1 signature 五字节：PROXY
+</span><span style="color:#0f0">    v2 signature 12字节：\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A
+</span><span style="color:#0f0">  */</span>
+    <span style="color:#f00">if</span> (has_proxy_protocol_header(net)
+        &amp;&amp; net-&gt;thd &amp;&amp;
+        ((THD *)net-&gt;thd)-&gt;get_command() == COM_CONNECT)
+    {
+      <span style="color:#0f0">/* Proxy information found in the first 4 bytes received so far.
+</span><span style="color:#0f0">         Read and parse proxy header , change peer ip address and port in THD.
+</span><span style="color:#0f0">       */</span>
+      <span style="color:#0f0">/* 处理 proxy header，修改 THD 中的 ip port */</span>
+      <span style="color:#f00">if</span> (handle_proxy_header(net))
+      {
+        <span style="color:#0f0">/* error happened, message is already written. */</span>
+        len= packet_error;
+        <span style="color:#f00">goto</span> end;
+      }
+       
+      <span style="color:#0f0">/* proxy protocol header 处理成功，跳到函数头重新读取 */</span>
+      <span style="color:#f00">goto</span> retry;
+    }
+ 
+<span style="color:#f00">static</span> <span style="color:#ee82ee">int</span> handle_proxy_header(NET *net)
+{
+  <span style="color:#0f0">/*
+</span><span style="color:#0f0">    判断 proxy protocol header 的来源 ip 是否在白名单中
+</span><span style="color:#0f0">    白名单是一个全局变量 proxy_protocol_networks
+</span><span style="color:#0f0">    白名单 ip 以逗号分隔保存在全局变量中
+</span><span style="color:#0f0">  */</span>
+  <span style="color:#f00">if</span> (!is_proxy_protocol_allowed((sockaddr *)&amp;(thd-&gt;net.vio-&gt;remote)))
+  {
+     <span style="color:#0f0">/* proxy-protocol-networks variable needs to be set to allow this remote address */</span>
+     my_printf_error(ER_HOST_NOT_PRIVILEGED, <span style="color:#87ceeb">&#34;Proxy header is not accepted from %s&#34;</span>,
+       MYF(<span style="color:#f60">0</span>), thd-&gt;main_security_ctx.ip);
+     <span style="color:#f00">return</span> <span style="color:#f60">1</span>;
+  }
+ 
+  <span style="color:#0f0">/*
+</span><span style="color:#0f0">    根据格式解析 proxy protocol header，格式在上文中已做介绍
+</span><span style="color:#0f0">    解析结果保存在 peer_info 中
+</span><span style="color:#0f0">  */</span>
+  <span style="color:#f00">if</span> (parse_proxy_protocol_header(net, &amp;peer_info))
+  {
+     <span style="color:#0f0">/* Failed to parse proxy header*/</span>
+     my_printf_error(ER_UNKNOWN_ERROR, <span style="color:#87ceeb">&#34;Failed to parse proxy header&#34;</span>, MYF(<span style="color:#f60">0</span>));
+     <span style="color:#f00">return</span> <span style="color:#f60">1</span>;
+  }
+ 
+  <span style="color:#0f0">/* Change peer address in THD and ACL structures.*/</span>
+  <span style="color:#0f0">/* 将 peer_info 中的信息转存到 thd 中 */</span>
+  <span style="color:#f00">return</span> thd_set_peer_addr(thd, &amp;(peer_info.peer_addr), NULL, peer_info.port, false);
+}
+</code></pre></div></article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#报文格式">报文格式</a>
+      <ul>
+        <li><a href="#v1">v1</a></li>
+        <li><a href="#v2">v2</a></li>
+      </ul>
+    </li>
+    <li><a href="#客户端改造">客户端改造</a></li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

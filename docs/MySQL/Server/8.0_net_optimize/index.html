@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Administrative Connection Management #  如果MySQL连接连接被打满，有时甚至连root也无法登录去kill。
+对于这个问题，目前已有的解法有：
+ 各家的线程池提供了extra_port。 Alibaba RDS MySQL的做法是把connection的个数拆分成不同的使用目的，例如系统维护账户占用一部分，用户账户占用一部分，两者不互相影响。  MySQL 8.0提供了administrative-connection-interface的机制（由facebook贡献），即提供单独的network interface并且可以单独配置一个pthread用于listen。
+参数如下：
+ admin_address admin_port create_admin_listener_thread：是否创建一个单独的listener线程来监听admin的链接请求（默认OFF，建议打开）  worklog：WL#12138: Add Admin Port
+代码
+Multiple addresses for the –bind-address #  bind-address支持绑定多个网络地址。比如：
+// The server listens on the 198.51.100.20 IPv4 address and the 2001:db8:0:f101::1 IPv6 address. bind_address=198.51.100.20,2001:db8:0:f101::1 worklog：WL#11652: Support multiple addresses for the &ndash;bind-address command option
+代码
+connect/disconnect performance #  目前MySQL里是使用一个全局大锁（LOCK_thd_list、LOCK_thd_remove）来保护thd_list。
+优化的思路其实很简单直接：分区，将LOCK_thd_list、LOCK_thd_remove根据thread id来分成8个分区（hardcode）来减少冲突，负面影响就是PS的监控数据需要聚合。
+worklog：WL#9250: Split LOCK_thd_list and LOCK_thd_remove mutexes">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="Administrative Connection Management #  如果MySQL连接连接被打满，有时甚至连root也无法登录去kill。
+对于这个问题，目前已有的解法有：
+ 各家的线程池提供了extra_port。 Alibaba RDS MySQL的做法是把connection的个数拆分成不同的使用目的，例如系统维护账户占用一部分，用户账户占用一部分，两者不互相影响。  MySQL 8.0提供了administrative-connection-interface的机制（由facebook贡献），即提供单独的network interface并且可以单独配置一个pthread用于listen。
+参数如下：
+ admin_address admin_port create_admin_listener_thread：是否创建一个单独的listener线程来监听admin的链接请求（默认OFF，建议打开）  worklog：WL#12138: Add Admin Port
+代码
+Multiple addresses for the –bind-address #  bind-address支持绑定多个网络地址。比如：
+// The server listens on the 198.51.100.20 IPv4 address and the 2001:db8:0:f101::1 IPv6 address. bind_address=198.51.100.20,2001:db8:0:f101::1 worklog：WL#11652: Support multiple addresses for the &ndash;bind-address command option
+代码
+connect/disconnect performance #  目前MySQL里是使用一个全局大锁（LOCK_thd_list、LOCK_thd_remove）来保护thd_list。
+优化的思路其实很简单直接：分区，将LOCK_thd_list、LOCK_thd_remove根据thread id来分成8个分区（hardcode）来减少冲突，负面影响就是PS的监控数据需要聚合。
+worklog：WL#9250: Split LOCK_thd_list and LOCK_thd_remove mutexes" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/8.0_net_optimize/" /><meta property="article:section" content="docs" />
+
+<meta property="article:modified_time" content="2022-05-15T10:43:56&#43;08:00" />
+
+<title>8.0 Net Optimize | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.01b86181b4c57573b5c15cbc0cfd48db7383e375502695b3f2d81d09e9b6bf39.js" integrity="sha256-AbhhgbTFdXO1wVy8DP1I23OD43VQJpWz8tgdCem2vzk=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+<li><a href="/docs/MySQL/Server/8.0_net_optimize/"class=active>MySQL 8.0 对网络模块的优化</a></li>
+<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源</a></li>
+<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+<li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>8.0 Net Optimize</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#administrative-connection-management">Administrative Connection Management</a></li>
+    <li><a href="#multiple-addresses-for-the-bind-address">Multiple addresses for the –bind-address</a></li>
+    <li><a href="#connectdisconnect-performance">connect/disconnect performance</a></li>
+    <li><a href="#transfer-metadata-optional">transfer metadata optional</a></li>
+    <li><a href="#mysql-protocol-support-async">MySQL protocol support async</a></li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><h1 id="administrative-connection-management">
+  Administrative Connection Management
+  <a class="anchor" href="#administrative-connection-management">#</a>
+</h1>
+<p>如果MySQL连接连接被打满，有时甚至连root也无法登录去kill。</p>
+<p>对于这个问题，目前已有的解法有：</p>
+<ul>
+<li>各家的线程池提供了extra_port。</li>
+<li>Alibaba RDS MySQL的做法是把connection的个数拆分成不同的使用目的，例如系统维护账户占用一部分，用户账户占用一部分，两者不互相影响。</li>
+</ul>
+<p>MySQL 8.0提供了<a href="https://dev.mysql.com/doc/refman/8.0/en/administrative-connection-interface.html">administrative-connection-interface</a>的机制（由facebook贡献），即提供单独的network interface并且可以单独配置一个pthread用于listen。</p>
+<p>参数如下：</p>
+<ul>
+<li><a href="https://dev.mysql.com/doc/refman/8.0/en/server-system-variables.html#sysvar_admin_address">admin_address</a></li>
+<li><a href="https://dev.mysql.com/doc/refman/8.0/en/server-system-variables.html#sysvar_admin_port">admin_port</a></li>
+<li><a href="https://dev.mysql.com/doc/refman/8.0/en/server-system-variables.html#sysvar_create_admin_listener_thread">create_admin_listener_thread</a>：是否创建一个单独的listener线程来监听admin的链接请求（默认OFF，建议打开）</li>
+</ul>
+<p>worklog：<a href="https://dev.mysql.com/worklog/task/?spm=a2c4e.10696291.0.0.6c3219a4Isd27l&amp;id=12138">WL#12138: Add Admin Port</a></p>
+<p><a href="https://github.com/zhaiwx1987/mysql-server/commit/56b48f3f75dbeb0584b96e9b7049b5d576852e95?spm=a2c4e.10696291.0.0.479519a45TjJN7">代码</a></p>
+<h1 id="multiple-addresses-for-the-bind-address">
+  Multiple addresses for the –bind-address
+  <a class="anchor" href="#multiple-addresses-for-the-bind-address">#</a>
+</h1>
+<p><a href="https://dev.mysql.com/doc/refman/8.0/en/server-system-variables.html#sysvar_bind_address">bind-address</a>支持绑定多个网络地址。比如：</p>
+<pre><code>// The server listens on the 198.51.100.20 IPv4 address and the 2001:db8:0:f101::1 IPv6 address.
+bind_address=198.51.100.20,2001:db8:0:f101::1
+</code></pre><p>worklog：<a href="https://dev.mysql.com/worklog/task/?spm=a2c4e.10696291.0.0.543319a4wICQgO&amp;id=11652">WL#11652: Support multiple addresses for the &ndash;bind-address command option</a></p>
+<p><a href="https://github.com/zhaiwx1987/mysql-server/commit/b72b101aa9435c637e1aa6e29417f03b937bf296?spm=a2c4e.10696291.0.0.760619a42BHhTT">代码</a></p>
+<h1 id="connectdisconnect-performance">
+  connect/disconnect performance
+  <a class="anchor" href="#connectdisconnect-performance">#</a>
+</h1>
+<p>目前MySQL里是使用一个全局大锁（LOCK_thd_list、LOCK_thd_remove）来保护thd_list。</p>
+<p>优化的思路其实很简单直接：分区，将LOCK_thd_list、LOCK_thd_remove根据thread id来分成8个分区（hardcode）来减少冲突，负面影响就是PS的监控数据需要聚合。</p>
+<p>worklog：<a href="https://dev.mysql.com/worklog/task/?spm=a2c4e.10696291.0.0.f60f19a4wgDcqN&amp;id=9250">WL#9250: Split LOCK_thd_list and LOCK_thd_remove mutexes</a></p>
+<p><a href="https://github.com/zhaiwx1987/mysql-server/commit/58187639671bf5266bd755dc84d2649b7296d664?spm=a2c4e.10696291.0.0.403919a4RdDKuU">代码</a></p>
+<h1 id="transfer-metadata-optional">
+  transfer metadata optional
+  <a class="anchor" href="#transfer-metadata-optional">#</a>
+</h1>
+<p>MySQL的结果集格式如下，点查下metadata在结果集包中的占比很大。</p>
+<pre><code>RESULTSET contains a bunch of packets:
+- metadata;
+- EOF_PACKET if not CLIENT_DEPRECATE_EOF flag set;
+- data rows;
+- OK_PACKET (or EOF_PACKET if not CLIENT_DEPRECATE_EOF flag set) or
+  ERR_PACKET
+</code></pre><p>MySQL 8.0提供了<a href="https://dev.mysql.com/doc/refman/8.0/en/server-system-variables.html?spm=a2c4e.10696291.0.0.2b9319a4mNflpc#sysvar_resultset_metadata">resultset_metadata</a>，可以有选择的不传输metadata，以提升TPS和吞吐。</p>
+<p><a href="https://dev.mysql.com/doc/c-api/8.0/en/c-api-optional-metadata.html">C client driver代码示例</a></p>
+<p>阿里的同学之前做过相应的对比测试：</p>
+<pre><code>After porting twitter's patch ( Great thanks to Davi Arnaut) to MySQL5.6.16, I slightly changed it to make protocol_mode support more options:
+ 
+0/METADATA_FULL: return all metadata, default value.
+1/METADATA_REAL_COLUMN: only column name;
+2/METADATA_FAKE_COLUMN: fake column name ,use 1,2...N instead of real column name
+3/METADATA_NULL_COLUMN: use NULL to express the metadata information
+4/METADATA_IGNORE: ignore metadata information, just for test..
+ 
+CREATE TABLE `test_meta_impact` (
+    `abcdefg1` int(11) NOT NULL AUTO_INCREMENT,
+    `abcdefg2` int(11) DEFAULT NULL,
+    `abcdefg3` int(11) DEFAULT NULL,
+    `abcdefg4` int(11) DEFAULT NULL,
+    ......
+    ......
+    `abcdefg40` int(11) DEFAULT NULL,
+    PRIMARY KEY (`abcdefg1`)
+    ) ENGINE=InnoDB AUTO_INCREMENT=229361 DEFAULT CHARSET=utf8
+ 
+mysqlslap --no-defaults -uxx --create-schema=test -h$host -P $port --number-of-queries=1000000000 --concurrency=100 --query='SELECT * FROM test.test_meta_impact where abcdefg1 = 2'
+ 
+METADATA_FULL : 3.48w TPS, Net send 113M
+METADATA_REAL_COLUMN: 7.2W TPS, Net send 111M
+METADATA_FAKE_COLUMN: 9.2W TPS , Net send 116M
+METADATA_NULL_COLUMN: 9.6w TPS , Net send 115M
+METADATA_IGNORE: 13.8w TPS, Net send 30M
+</code></pre><p>worklog：<a href="https://dev.mysql.com/worklog/task/?spm=a2c4e.10696291.0.0.10cb19a4mvo1st&amp;id=8134">WL#8134: Make metadata information transfer optional</a></p>
+<p><a href="https://github.com/zhaiwx1987/mysql-server/commit/3f4ac020306ed5000d3cf8c908efa9786097d42d?spm=a2c4e.10696291.0.0.771f19a4uUVwCM">代码</a></p>
+<h1 id="mysql-protocol-support-async">
+  MySQL protocol support async
+  <a class="anchor" href="#mysql-protocol-support-async">#</a>
+</h1>
+<p>目前的MySQL C client APIs是synchronous，即在MySQL server处理请求返回完成前，只能等待。MySQL 8.0增加了protocol的异步支持，增加以下异步函数（原有api+_nonblocking）：</p>
+<ul>
+<li>mysql_real_connect_nonblocking</li>
+<li>mysql_send_query_nonblocking</li>
+<li>mysql_real_query_nonblocking</li>
+<li>mysql_store_result_nonblocking</li>
+<li>mysql_next_result_nonblocking</li>
+<li>mysql_fetch_row_nonblocking</li>
+<li>mysql_free_result_nonblocking</li>
+</ul>
+<p>worklog：<a href="https://dev.mysql.com/worklog/task/?spm=a2c4e.10696291.0.0.369719a4lP2qFl&amp;id=11381">WL#11381: Add asynchronous support into the mysql protocol</a></p>
+<p><a href="https://github.com/mysql/mysql-server/commit/c1fffc3c651f22451154c9834a43c661112b368c?spm=a2c4e.10696291.0.0.166019a44gKL3h">代码</a></p>
+<p><a href="https://dev.mysql.com/doc/c-api/8.0/en/c-api-asynchronous-interface.html">C client driver代码示例</a></p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#administrative-connection-management">Administrative Connection Management</a></li>
+    <li><a href="#multiple-addresses-for-the-bind-address">Multiple addresses for the –bind-address</a></li>
+    <li><a href="#connectdisconnect-performance">connect/disconnect performance</a></li>
+    <li><a href="#transfer-metadata-optional">transfer metadata optional</a></li>
+    <li><a href="#mysql-protocol-support-async">MySQL protocol support async</a></li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
