@@ -76,9 +76,10 @@ MySQL大事时间表：
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/6_page/</guid>
-      <description>索引页 #  InnoDB存储引擎是索引组织表，因此聚簇索引页的叶子节点中存放完整的数据记录，辅助索引页的叶子节点中存放指向聚簇索引页叶子节点的书签（bookmark），也可以称为路标。
+      <description>InnoDB使用的是索引组织表，因此聚簇索引的叶子节点中存放完整的数据记录，辅助索引页的叶子节点中存放指向聚簇索引页叶子节点的书签（bookmark），也可以称为路标。
 主要是两部分：
- page layout scan rec with cursor, and then insert, update, delete  1. 页 #  页是InnoDB存储引擎的最小存储单位。页的大小可以设置为4K、8K、16K、32K、64K，默认为16K，页的大小设置要考虑IO性能，也会影响到区的分配大小和重做日志缓冲的大小，详见innodb_page_size。</description>
+ page layout scan rec with cursor, and then insert, update, delete  页 #  页是InnoDB存储数据的基本单位。页的大小可以设置为4K~64K（4K的倍数），默认为16K。页的大小设置要从IO性能考虑。
+/* Define the Min, Max, Default page sizes. */ /** Minimum Page Size Shift (power of 2) */ #define UNIV_PAGE_SIZE_SHIFT_MIN 12 /** Maximum Page Size Shift (power of 2) */ #define UNIV_PAGE_SIZE_SHIFT_MAX 16 /** Default Page Size Shift (power of 2) */ #define UNIV_PAGE_SIZE_SHIFT_DEF 14 static MYSQL_SYSVAR_ULONG(page_size, srv_page_size, PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY, &amp;quot;Page size to use for all InnoDB tablespaces.</description>
     </item>
     
   </channel>
