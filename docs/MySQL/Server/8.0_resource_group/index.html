@@ -3,29 +3,31 @@
 <head>
   <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="ＭySQL8.0增加了一个新功能resource group，可以对不同的用户进行资源控制，例如对用户线程和后台系统线程给予不同的CPU优先级。
+<meta name="description" content="（转载自阿里内核月报）
+ＭySQL8.0增加了一个新功能resource group，可以对不同的用户进行资源控制，例如对用户线程和后台系统线程给予不同的CPU优先级。
 用户可以通过SQL接口创建不同的分组，这些分组可以作为sql的hit，也可以动态的绑定过去。本文主要简单介绍下用法，至于底层如何实现的，其实比较简单：创建的分组被存储到系统表中；在linux系统底层通过CPU_SET来绑定CPU，通过setpriority来设置线程的nice值
 worklog: WL#9467: Resource Groups
 创建resource group #  系统自带两个resource group（不可修改）：
- FOREGROUND (FG) - &ldquo;user&rdquo; threads BACKGROUND (BG) - &ldquo;system&rdquo; threads (internal Engine threads, e.g. &ldquo;purge&quot;in InnoDB, etc.)  mysql&gt; SELECT * FROM INFORMATION_SCHEMA.RESOURCE_GROUPS\G *************************** 1. row *************************** RESOURCE_GROUP_NAME: USR_default RESOURCE_GROUP_TYPE: USER RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 *************************** 2. row *************************** RESOURCE_GROUP_NAME: SYS_default RESOURCE_GROUP_TYPE: SYSTEM RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 2 rows in set (0.00 sec) 只有超级账户启动mysqld才能设置thread priority，否则只能降低而不能提升优先级。（-20最高，20最低）">
+ FOREGROUND (FG) - &ldquo;user&rdquo; threads BACKGROUND (BG) - &ldquo;system&rdquo; threads (internal Engine threads, e.g. &ldquo;purge&quot;in InnoDB, etc.)  mysql&gt; SELECT * FROM INFORMATION_SCHEMA.RESOURCE_GROUPS\G *************************** 1. row *************************** RESOURCE_GROUP_NAME: USR_default RESOURCE_GROUP_TYPE: USER RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 *************************** 2. row *************************** RESOURCE_GROUP_NAME: SYS_default RESOURCE_GROUP_TYPE: SYSTEM RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 2 rows in set (0.">
 <meta name="theme-color" content="#FFFFFF">
 <meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
-<meta property="og:description" content="ＭySQL8.0增加了一个新功能resource group，可以对不同的用户进行资源控制，例如对用户线程和后台系统线程给予不同的CPU优先级。
+<meta property="og:description" content="（转载自阿里内核月报）
+ＭySQL8.0增加了一个新功能resource group，可以对不同的用户进行资源控制，例如对用户线程和后台系统线程给予不同的CPU优先级。
 用户可以通过SQL接口创建不同的分组，这些分组可以作为sql的hit，也可以动态的绑定过去。本文主要简单介绍下用法，至于底层如何实现的，其实比较简单：创建的分组被存储到系统表中；在linux系统底层通过CPU_SET来绑定CPU，通过setpriority来设置线程的nice值
 worklog: WL#9467: Resource Groups
 创建resource group #  系统自带两个resource group（不可修改）：
- FOREGROUND (FG) - &ldquo;user&rdquo; threads BACKGROUND (BG) - &ldquo;system&rdquo; threads (internal Engine threads, e.g. &ldquo;purge&quot;in InnoDB, etc.)  mysql&gt; SELECT * FROM INFORMATION_SCHEMA.RESOURCE_GROUPS\G *************************** 1. row *************************** RESOURCE_GROUP_NAME: USR_default RESOURCE_GROUP_TYPE: USER RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 *************************** 2. row *************************** RESOURCE_GROUP_NAME: SYS_default RESOURCE_GROUP_TYPE: SYSTEM RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 2 rows in set (0.00 sec) 只有超级账户启动mysqld才能设置thread priority，否则只能降低而不能提升优先级。（-20最高，20最低）" />
+ FOREGROUND (FG) - &ldquo;user&rdquo; threads BACKGROUND (BG) - &ldquo;system&rdquo; threads (internal Engine threads, e.g. &ldquo;purge&quot;in InnoDB, etc.)  mysql&gt; SELECT * FROM INFORMATION_SCHEMA.RESOURCE_GROUPS\G *************************** 1. row *************************** RESOURCE_GROUP_NAME: USR_default RESOURCE_GROUP_TYPE: USER RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 *************************** 2. row *************************** RESOURCE_GROUP_NAME: SYS_default RESOURCE_GROUP_TYPE: SYSTEM RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 2 rows in set (0." />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/8.0_resource_group/" /><meta property="article:section" content="docs" />
 
-<meta property="article:modified_time" content="2022-05-15T10:43:56&#43;08:00" />
+<meta property="article:modified_time" content="2022-05-17T11:37:25&#43;08:00" />
 
 <title>8.0 Resource Group | Rick&#39;s Blog</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.c13cb8faf469a1dcf70e8ec20a8de45fd8a6f16cd274cd55134134304173acc8.js" integrity="sha256-wTy4&#43;vRpodz3Do7CCo3kX9im8WzSdM1VE0E0MEFzrMg=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.c7b43aee56ecc9a14f0cc5206108445af82de23fb44627d2d8356ae83def17d9.js" integrity="sha256-x7Q67lbsyaFPDMUgYQhEWvgt4j&#43;0RifS2DVq6D3vF9k=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -74,19 +76,22 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/Server/thd/">THD</a></li>
 <li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
 <ul>
-<li><a href="/docs/MySQL/Server/returning/">Returning</a></li>
+<li><a href="/docs/MySQL/Server/returning/">Returning（转）</a></li>
 </ul>
 </li>
 <li><a href="/docs/MySQL/Server/net/">NET</a></li>
 <li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
-<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化</a></li>
-<li><a href="/docs/MySQL/Server/8.0_resource_group/"class=active>MySQL 8.0 通过Resource Group来控制线程计算资源</a></li>
-<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol</a></li>
+<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化（转）</a></li>
+<li><a href="/docs/MySQL/Server/8.0_resource_group/"class=active>MySQL 8.0 通过Resource Group来控制线程计算资源（转）</a></li>
+<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol（转）</a></li>
 </ul>
 </li>
 <li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
 <li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
 <li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
+<li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
+<li><a href="/docs/MySQL/Server/memory/">Server层的内存管理</a></li>
+<li><a href="/docs/MySQL/Server/invisible_index/">Invisible Index</a></li>
 </ul>
 </li>
 <li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
@@ -97,6 +102,7 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
 <li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
 <li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+<li><a href="/docs/MySQL/InnoDB/7_storage/">storage</a></li>
 </ul>
 </li>
 </ul>
@@ -174,7 +180,8 @@ https://github.com/alex-shpak/hugo-book
 
       
       
-  <article class="markdown"><p>ＭySQL8.0增加了一个新功能resource group，可以对不同的用户进行资源控制，例如对用户线程和后台系统线程给予不同的CPU优先级。</p>
+  <article class="markdown"><p>（转载自阿里内核月报）</p>
+<p>ＭySQL8.0增加了一个新功能resource group，可以对不同的用户进行资源控制，例如对用户线程和后台系统线程给予不同的CPU优先级。</p>
 <p>用户可以通过SQL接口创建不同的分组，这些分组可以作为sql的hit，也可以动态的绑定过去。本文主要简单介绍下用法，至于底层如何实现的，其实比较简单：创建的分组被存储到系统表中；在linux系统底层通过CPU_SET来绑定CPU，通过setpriority来设置线程的nice值</p>
 <p>worklog: <a href="https://dev.mysql.com/worklog/task/?id=9467">WL#9467: Resource Groups</a></p>
 <h1 id="创建resource-group">

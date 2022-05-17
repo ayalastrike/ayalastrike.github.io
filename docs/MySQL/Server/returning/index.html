@@ -3,27 +3,29 @@
 <head>
   <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="背景 #  MySQL对于statement执行结果报文通常分为两类：Resultset和OK/ERR，针对 DML语句则返回OK/ERR报文，其中包括几个影响记录，扫描记录等属性。但在很多业务场景下，通常 INSERT/UPDATE/DELETE 这样的DML语句后，都会跟随SELECT查询当前记录内容，以进行接下来的业务处理， 为了减少一次 Client &lt;-&gt; DB Server 交互，类似 PostgreSQL / Oracle 都提供了 returning clause 支持 DML 返回 Resultset。
+<meta name="description" content="（转载自阿里内核月报）
+背景 #  MySQL对于statement执行结果报文通常分为两类：Resultset和OK/ERR，针对 DML语句则返回OK/ERR报文，其中包括几个影响记录，扫描记录等属性。但在很多业务场景下，通常 INSERT/UPDATE/DELETE 这样的DML语句后，都会跟随SELECT查询当前记录内容，以进行接下来的业务处理， 为了减少一次 Client &lt;-&gt; DB Server 交互，类似 PostgreSQL / Oracle 都提供了 returning clause 支持 DML 返回 Resultset。
 AliSQL 为了减少对 MySQL 语法兼容性的侵入，并支持 returning 功能， 采用了 native procedure 的方式，使用DBMS_TRANS package，统一使用 returning procedure 来支持 DML 语句返回 Resultset。
 语法 #  DBMS_TRANS.returning(Field_list=&gt;, Statement=&gt;); 其中:
  Field list : 代表期望的返回字段，以 “,” 进行分割，支持 * 号表达； Statement ：表示要执行的DML 语句， 支持 INSERT / UPDATE / DELETE；  INSERT Returning #  针对 insert 语句， returning proc 返回插入到表中的记录内容；">
 <meta name="theme-color" content="#FFFFFF">
 <meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
-<meta property="og:description" content="背景 #  MySQL对于statement执行结果报文通常分为两类：Resultset和OK/ERR，针对 DML语句则返回OK/ERR报文，其中包括几个影响记录，扫描记录等属性。但在很多业务场景下，通常 INSERT/UPDATE/DELETE 这样的DML语句后，都会跟随SELECT查询当前记录内容，以进行接下来的业务处理， 为了减少一次 Client &lt;-&gt; DB Server 交互，类似 PostgreSQL / Oracle 都提供了 returning clause 支持 DML 返回 Resultset。
+<meta property="og:description" content="（转载自阿里内核月报）
+背景 #  MySQL对于statement执行结果报文通常分为两类：Resultset和OK/ERR，针对 DML语句则返回OK/ERR报文，其中包括几个影响记录，扫描记录等属性。但在很多业务场景下，通常 INSERT/UPDATE/DELETE 这样的DML语句后，都会跟随SELECT查询当前记录内容，以进行接下来的业务处理， 为了减少一次 Client &lt;-&gt; DB Server 交互，类似 PostgreSQL / Oracle 都提供了 returning clause 支持 DML 返回 Resultset。
 AliSQL 为了减少对 MySQL 语法兼容性的侵入，并支持 returning 功能， 采用了 native procedure 的方式，使用DBMS_TRANS package，统一使用 returning procedure 来支持 DML 语句返回 Resultset。
 语法 #  DBMS_TRANS.returning(Field_list=&gt;, Statement=&gt;); 其中:
  Field list : 代表期望的返回字段，以 “,” 进行分割，支持 * 号表达； Statement ：表示要执行的DML 语句， 支持 INSERT / UPDATE / DELETE；  INSERT Returning #  针对 insert 语句， returning proc 返回插入到表中的记录内容；" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/returning/" /><meta property="article:section" content="docs" />
 
-<meta property="article:modified_time" content="2022-05-13T18:40:56&#43;08:00" />
+<meta property="article:modified_time" content="2022-05-17T11:37:25&#43;08:00" />
 
 <title>Returning | Rick&#39;s Blog</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.c13cb8faf469a1dcf70e8ec20a8de45fd8a6f16cd274cd55134134304173acc8.js" integrity="sha256-wTy4&#43;vRpodz3Do7CCo3kX9im8WzSdM1VE0E0MEFzrMg=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.c7b43aee56ecc9a14f0cc5206108445af82de23fb44627d2d8356ae83def17d9.js" integrity="sha256-x7Q67lbsyaFPDMUgYQhEWvgt4j&#43;0RifS2DVq6D3vF9k=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -72,19 +74,22 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/Server/thd/">THD</a></li>
 <li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
 <ul>
-<li><a href="/docs/MySQL/Server/returning/"class=active>Returning</a></li>
+<li><a href="/docs/MySQL/Server/returning/"class=active>Returning（转）</a></li>
 </ul>
 </li>
 <li><a href="/docs/MySQL/Server/net/">NET</a></li>
 <li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
-<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化</a></li>
-<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源</a></li>
-<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol</a></li>
+<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化（转）</a></li>
+<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源（转）</a></li>
+<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol（转）</a></li>
 </ul>
 </li>
 <li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
 <li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
 <li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
+<li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
+<li><a href="/docs/MySQL/Server/memory/">Server层的内存管理</a></li>
+<li><a href="/docs/MySQL/Server/invisible_index/">Invisible Index</a></li>
 </ul>
 </li>
 <li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
@@ -95,6 +100,7 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
 <li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
 <li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+<li><a href="/docs/MySQL/InnoDB/7_storage/">storage</a></li>
 </ul>
 </li>
 </ul>
@@ -186,7 +192,8 @@ https://github.com/alex-shpak/hugo-book
 
       
       
-  <article class="markdown"><h1 id="背景">
+  <article class="markdown"><p>（转载自阿里内核月报）</p>
+<h1 id="背景">
   背景
   <a class="anchor" href="#%e8%83%8c%e6%99%af">#</a>
 </h1>

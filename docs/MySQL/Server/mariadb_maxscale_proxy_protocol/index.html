@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="MariaDB MaxScale 是一款数据库中间件，可以按照语义分发语句到多个数据库服务器上。它对应用程序透明，可以提供读写分离、负载均衡和高可用服务。
+<meta name="description" content="（转载自阿里内核月报）
+MariaDB MaxScale 是一款数据库中间件，可以按照语义分发语句到多个数据库服务器上。它对应用程序透明，可以提供读写分离、负载均衡和高可用服务。
 proxy protocol 是 MaxScale 引入，为了解决使用proxy作为中间件连接mysql时，mysql获取client ip用 client通过proxy中间价连接mysql时，mysql server接收到认证报文中，包含的是proxy节点的IP。如果mysql.user表中指定了client的IP，无法通过认证。
 一种传统处理方式是在proxy节点上保存client的ip和密码，用于client的认证，而在mysql server上使用另一套ip和密码用于proxy 节点到mysql server的认证。
 MariaDB MaxScale引入了proxy protocol来解决client ip透传的问题。proxy节点获取到client ip后，把client ip包装在proxy protocol报文中发给server，server解析到了proxy protocol报文，再用报文中的ip替换proxy节点的ip
@@ -13,7 +14,8 @@ v1 #  v1 报文是字符串形式 “PROXY %s %s %s %d %d”
    字段 内容     签名 PROXY   %s.1 address family   %s.">
 <meta name="theme-color" content="#FFFFFF">
 <meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
-<meta property="og:description" content="MariaDB MaxScale 是一款数据库中间件，可以按照语义分发语句到多个数据库服务器上。它对应用程序透明，可以提供读写分离、负载均衡和高可用服务。
+<meta property="og:description" content="（转载自阿里内核月报）
+MariaDB MaxScale 是一款数据库中间件，可以按照语义分发语句到多个数据库服务器上。它对应用程序透明，可以提供读写分离、负载均衡和高可用服务。
 proxy protocol 是 MaxScale 引入，为了解决使用proxy作为中间件连接mysql时，mysql获取client ip用 client通过proxy中间价连接mysql时，mysql server接收到认证报文中，包含的是proxy节点的IP。如果mysql.user表中指定了client的IP，无法通过认证。
 一种传统处理方式是在proxy节点上保存client的ip和密码，用于client的认证，而在mysql server上使用另一套ip和密码用于proxy 节点到mysql server的认证。
 MariaDB MaxScale引入了proxy protocol来解决client ip透传的问题。proxy节点获取到client ip后，把client ip包装在proxy protocol报文中发给server，server解析到了proxy protocol报文，再用报文中的ip替换proxy节点的ip
@@ -24,14 +26,14 @@ v1 #  v1 报文是字符串形式 “PROXY %s %s %s %d %d”
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/" /><meta property="article:section" content="docs" />
 
-<meta property="article:modified_time" content="2022-05-15T10:43:56&#43;08:00" />
+<meta property="article:modified_time" content="2022-05-17T11:37:25&#43;08:00" />
 
 <title>Mariadb Maxscale Proxy Protocol | Rick&#39;s Blog</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.c13cb8faf469a1dcf70e8ec20a8de45fd8a6f16cd274cd55134134304173acc8.js" integrity="sha256-wTy4&#43;vRpodz3Do7CCo3kX9im8WzSdM1VE0E0MEFzrMg=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.c7b43aee56ecc9a14f0cc5206108445af82de23fb44627d2d8356ae83def17d9.js" integrity="sha256-x7Q67lbsyaFPDMUgYQhEWvgt4j&#43;0RifS2DVq6D3vF9k=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -80,19 +82,22 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/Server/thd/">THD</a></li>
 <li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
 <ul>
-<li><a href="/docs/MySQL/Server/returning/">Returning</a></li>
+<li><a href="/docs/MySQL/Server/returning/">Returning（转）</a></li>
 </ul>
 </li>
 <li><a href="/docs/MySQL/Server/net/">NET</a></li>
 <li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
-<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化</a></li>
-<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源</a></li>
-<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/"class=active>MariaDB MaxScale Proxy Protocol</a></li>
+<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化（转）</a></li>
+<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源（转）</a></li>
+<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/"class=active>MariaDB MaxScale Proxy Protocol（转）</a></li>
 </ul>
 </li>
 <li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
 <li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
 <li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
+<li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
+<li><a href="/docs/MySQL/Server/memory/">Server层的内存管理</a></li>
+<li><a href="/docs/MySQL/Server/invisible_index/">Invisible Index</a></li>
 </ul>
 </li>
 <li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
@@ -103,6 +108,7 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
 <li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
 <li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+<li><a href="/docs/MySQL/InnoDB/7_storage/">storage</a></li>
 </ul>
 </li>
 </ul>
@@ -185,7 +191,8 @@ https://github.com/alex-shpak/hugo-book
 
       
       
-  <article class="markdown"><p>MariaDB MaxScale 是一款数据库中间件，可以按照语义分发语句到多个数据库服务器上。它对应用程序透明，可以提供读写分离、负载均衡和高可用服务。</p>
+  <article class="markdown"><p>（转载自阿里内核月报）</p>
+<p>MariaDB MaxScale 是一款数据库中间件，可以按照语义分发语句到多个数据库服务器上。它对应用程序透明，可以提供读写分离、负载均衡和高可用服务。</p>
 <p>proxy protocol 是 MaxScale 引入，为了解决使用proxy作为中间件连接mysql时，mysql获取client ip用 client通过proxy中间价连接mysql时，mysql server接收到认证报文中，包含的是proxy节点的IP。如果mysql.user表中指定了client的IP，无法通过认证。</p>
 <p>一种传统处理方式是在proxy节点上保存client的ip和密码，用于client的认证，而在mysql server上使用另一套ip和密码用于proxy 节点到mysql server的认证。</p>
 <p>MariaDB MaxScale引入了proxy protocol来解决client ip透传的问题。proxy节点获取到client ip后，把client ip包装在proxy protocol报文中发给server，server解析到了proxy protocol报文，再用报文中的ip替换proxy节点的ip</p>

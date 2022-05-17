@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="是否使用索引对性能影响很大。在数据库运维过程中，索引的删除总是慎重的，一方面是因为实际的DDL变更代价，一方面是评估对性能的影响。
+为了减少删除索引的代价，MySQL 8.0引入了invisible index，用于解决这个问题。
+即在索引上增加一个invisible的属性，用于optimizer可以将其忽略掉。
+从这里也可以看到，引入的带动在server层，不涉及到存储引擎，所以所有的存储引擎都适用。
+MySQL的实现基本参考的是Oracle 12c。
+MySQL 8.0.0 Release Notes
+ Optimizer Notes  MySQL now supports invisible indexes. An invisible index is not used by the optimizer at all, but is otherwise maintained normally. Indexes are visible by default. Invisible indexes make it possible to test the effect of removing an index on query performance, without making a destructive change that must be undone should the index turn out to be required.">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="是否使用索引对性能影响很大。在数据库运维过程中，索引的删除总是慎重的，一方面是因为实际的DDL变更代价，一方面是评估对性能的影响。
+为了减少删除索引的代价，MySQL 8.0引入了invisible index，用于解决这个问题。
+即在索引上增加一个invisible的属性，用于optimizer可以将其忽略掉。
+从这里也可以看到，引入的带动在server层，不涉及到存储引擎，所以所有的存储引擎都适用。
+MySQL的实现基本参考的是Oracle 12c。
+MySQL 8.0.0 Release Notes
+ Optimizer Notes  MySQL now supports invisible indexes. An invisible index is not used by the optimizer at all, but is otherwise maintained normally. Indexes are visible by default. Invisible indexes make it possible to test the effect of removing an index on query performance, without making a destructive change that must be undone should the index turn out to be required." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/invisible_index/" /><meta property="article:section" content="docs" />
+
+<meta property="article:modified_time" content="2022-05-17T11:37:25&#43;08:00" />
+
+<title>Invisible Index | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.c7b43aee56ecc9a14f0cc5206108445af82de23fb44627d2d8356ae83def17d9.js" integrity="sha256-x7Q67lbsyaFPDMUgYQhEWvgt4j&#43;0RifS2DVq6D3vF9k=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning（转）</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化（转）</a></li>
+<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源（转）</a></li>
+<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol（转）</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+<li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
+<li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
+<li><a href="/docs/MySQL/Server/memory/">Server层的内存管理</a></li>
+<li><a href="/docs/MySQL/Server/invisible_index/"class=active>Invisible Index</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+<li><a href="/docs/MySQL/InnoDB/7_storage/">storage</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>Invisible Index</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents"></nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><p>是否使用索引对性能影响很大。在数据库运维过程中，索引的删除总是慎重的，一方面是因为实际的DDL变更代价，一方面是评估对性能的影响。</p>
+<p>为了减少删除索引的代价，MySQL 8.0引入了invisible index，用于解决这个问题。</p>
+<p>即在索引上增加一个invisible的属性，用于optimizer可以将其忽略掉。</p>
+<p>从这里也可以看到，引入的带动在server层，不涉及到存储引擎，所以所有的存储引擎都适用。</p>
+<p>MySQL的实现基本参考的是Oracle 12c。</p>
+<blockquote class="book-hint info">
+  <p><strong>MySQL 8.0.0 Release Notes</strong></p>
+<ul>
+<li>Optimizer Notes
+<ul>
+<li>MySQL now supports invisible indexes. An invisible index is not used by the optimizer at all, but is otherwise maintained normally. Indexes are visible by default. Invisible indexes make it possible to test the effect of removing an index on query performance, without making a destructive change that must be undone should the index turn out to be required. This feature applies to <code>InnoDB</code> tables, for indexes other than primary keys.</li>
+<li>To control whether an index is invisible explicitly for a new index, use a <code>VISIBLE</code> or<code>INVISIBLE</code> keyword as part of the index definition for <a href="https://dev.mysql.com/doc/refman/8.0/en/create-table.html"><code>CREATE TABLE</code></a>, <a href="https://dev.mysql.com/doc/refman/8.0/en/create-index.html"><code>CREATE INDEX</code></a>, or <a href="https://dev.mysql.com/doc/refman/8.0/en/alter-table.html"><code>ALTER TABLE</code></a>. To alter the invisibility of an existing index, use a <code>VISIBLE</code> or <code>INVISIBLE</code> keyword with the <code>ALTER TABLE ... ALTER INDEX</code> operation. For more information, see <a href="https://dev.mysql.com/doc/refman/8.0/en/invisible-indexes.html">Invisible Indexes</a>.</li>
+</ul>
+</li>
+</ul>
+
+</blockquote>
+
+<blockquote class="book-hint info">
+  <p><strong>MySQL 8.0.1 Release Notes</strong></p>
+<ul>
+<li>Optimizer Notes
+<ul>
+<li>Previously, invisible indexes were supported only for the <code>InnoDB</code> storage engine. Invisible indexes are now storage engine neutral (supported for any engine). (Bug #23541244)</li>
+</ul>
+</li>
+<li>Bugs Fixed
+<ul>
+<li>Index hints applied to invisible indexes produced no error. (Bug #24660093, <a href="https://bugs.mysql.com/bug.php?id=82960">Bug #82960</a>)</li>
+</ul>
+</li>
+</ul>
+
+</blockquote>
+
+<blockquote class="book-hint info">
+  <p><strong>MySQL 8.0.11 Release Notes</strong></p>
+<ul>
+<li>Bugs Fixed
+<ul>
+<li>Row-based replication used the wrong set of indexes on the slave. (<a href="https://bugs.mysql.com/bug.php?id=88847">Bug #88847</a>, Bug #27244826)</li>
+</ul>
+</li>
+</ul>
+
+</blockquote>
+
+<p>WorkLog:</p>
+<ul>
+<li><a href="https://dev.mysql.com/worklog/task/?id=8697">WL#8697 Support for INVISIBLE indexes</a></li>
+<li><a href="https://dev.mysql.com/worklog/task/?id=10891">WL#10891: optimizer_switch to see invisible indexes</a></li>
+</ul>
+<p>MySQL Server团队、PERCONA和阿里数据库团队的解读</p>
+<ul>
+<li><a href="http://mysqlserverteam.com/mysql-8-0-invisible-indexes/">MySQL 8.0: Invisible Indexes</a></li>
+<li><a href="https://www.percona.com/blog/2016/10/27/thoughts-mysql-8-invisible-indexes/">Thoughts on MySQL 8.0 Invisible Indexes</a></li>
+<li><a href="http://mysql.taobao.org/monthly/2017/07/03/">AliSQL · 特性介绍 · 支持 Invisible Indexes</a></li>
+</ul>
+<p>其中背后的思想是以下两点：</p>
+<ul>
+<li>soft delete</li>
+<li>staged rollout</li>
+</ul>
+<p>应用场景主要有：</p>
+<ul>
+<li>线上的产品库数据规模上不同于线下库，数据访问方式可能不同，这对于索引评估至关重要</li>
+<li>可以立即看到效果（ALTER TABLE algorithm = replace）</li>
+<li>只有某个会话想用到某个索引</li>
+<li>使用FORCE INDEX的风险：如果没有索引命中，可能会导致全表扫描的高昂代价</li>
+</ul>
+<p>在MySQL 8.0中元信息不再存储在frm里，而在backport到5.7时需要处理frm，阿里的做法是复用了一个不存在frm里的flag HA_SORT_ALLOWS_SAME，我们是采用了一个D flag来标记。</p>
+<p>backport changes：</p>
+<pre><code>1. 增加配置项 reset_frm_visibility_enabled
+sql/mysqld.h
+sql/mysqld.cc
+sql/sys_vars.cc
+在开启enable下扫描解析frm
+sql/mysqld.cc
+ 
+ 
+2. frm操作
+增加
+sql/sql_reset_index_visibility.h
+sql/sql_reset_index_visibility.cc
+修改
+sql/CMakeLists.txt
+ 
+扫描：find_all_frms
+reset（兼容性）：reset_frm_index  [128] == D set to d
+ 
+只扫描除了mysql/performance_schema/sys之外的目录
+系统目录全集：https://dev.mysql.com/doc/refman/5.7/en/data-directory.html
+ 
+3. 词法
+sql/lex.h
+VISIBLE
+INVISIBLE
+ 
+4. 语法
+sql/share/
+ER_PK_INDEX_CANT_BE_INVISIBLE
+sql/sql_yacc.yy
+sql/sql_alter.h
+sql/sql_alter.cc
+sql/sql_table.cc
+ 
+          alter_commands
+          {
+            THD *thd= YYTHD;
+            LEX *lex= thd-&gt;lex;
+            if (!lex-&gt;m_sql_cmd)
+            {
+              /* Create a generic ALTER TABLE statment. */
+              lex-&gt;m_sql_cmd= new (thd-&gt;mem_root) Sql_cmd_alter_table();
+              if (lex-&gt;m_sql_cmd == NULL)
+                MYSQL_YYABORT;
+            }
+          }
+ 
+alter_commands
+alter_command_list
+alter_list
+alter_list_item
+ 
+keywords
+    VISIBLE_SYM
+    INVISIBLE_SYM
+ 
+key_visibility
+ 
+%type &lt;NONE&gt;
+       key_visibility
+END_OF_INPUT
+ 
+key_visibility:
+          VISIBLE_SYM { Lex-&gt;key_create_info.is_visible= true; }
+        | INVISIBLE_SYM { Lex-&gt;key_create_info.is_visible= false; }
+ 
+key algo
+ 
+normal_key_options:
+          /* empty */ {}
+        | normal_key_opts
+        | key_visibility
+        ;
+ 
+fulltext_key_options:
+          /* empty */ {}
+        | fulltext_key_opts
+        | key_visibility
+        ;
+ 
+spatial_key_options:
+          /* empty */ {}
+        | spatial_key_opts
+        | key_visibility
+        ;
+ 
+ALTER TABLE ALTER INDEX VISIBLE/INVISIBLE
+        | ALTER INDEX_SYM ident key_visibility
+          {
+            LEX *lex= Lex;
+            Alter_index_visibility *aiv= new Alter_index_visibility($3.str, lex-&gt;key_create_info.is_visible);
+            if (aiv == NULL)
+              MYSQL_YYABORT;
+            lex-&gt;alter_info.alter_index_visibility_list.push_back(aiv);
+            lex-&gt;alter_info.flags|= Alter_info::ALTER_INDEX_VISIBILITY;
+          }
+ 
+增加Alter_index_visibility类，并在Alloc_Info中配置为成员变量, ctor reset()
+并实现ctor
+ 
+PK不能设置invisible
+create index
+    add_create_index()
+ 
+5. key_create_info增加is_visible属性
+sql/handler.h   bool is_visible
+sql/handler.cc  default_key_create_info
+ 
+6. 在alter table时设置new_key.is_visible，把old_key，new_key放入index_altered_visibility_buffer的KEY_PAIR
++ Alter_inplace_info.add_altered_index_visibility()
++uint index_altered_visibility_count
++KEY_PAIR *index_altered_visibility_buffer
+ 
+mysql_alter_table
+    fill_alter_inplace_info
+ 
+7. 读取frm文件中的key visible flag
+sql/unireg.cc
+pack_keys_visib
+mysql_create_frm
+sql/table.cc
+open_binary_frm
+ 
+8. 在表元信息中增加变量和方法
+在TABLE_SHARE中增加key_map visible_indexes bit(1)
+当开启thd.OPTIMIZER_SWITCH_USE_INVISIBLE_INDEXES，返回交集
++TABLE_SHARE::usable_indexes
+sql/table.h
+sql/sql_tmp_table.cc
+sql/table.cc
+ 
+9. SQL优化器调用usable_indexes
+TABLE_LIST::process_index_hints
+赋值、判断
+setup_ftfuncs
+    Item_func_match::fix_index()
+Rows_log_event::decide_row_lookup_algorithm_and_key()
+    search_key_in_table
+sql/table.cc
+sql/item_func.h
+sql/item_func.cc
+sql/log_event.cc
+storage/myisam/ha_myisam.cc
+更新setup_ftfuncs的调用，增加thd参数
+ 
+sql_command接入
+sql/sql_base.h
+sql/sql_base.cc
+sql/sql_update.cc
+sql/sql_delete.cc
+sql/sql_resolver.cc
+setup_ftfuncs
+    fix_index
+ 
+10. key增加is_visible属性
+标记是否对query optimizer可见      OPTIMIZER_SWITCH_USE_INVISIBLE_INDEXES
+show create table
+show table status
+mysql_prepare_create_table
++check_promoted_index
+sql/sql_const.h
+sql/key.h
+sql/sql_show.cc
+sql/sql_table.cc
+ 
+11. DDL
+mysql_alter_Table
+    fill_alter_inplace_info
+分配ha_alter_info-&gt;index_altered_visibility_buffer
+主键不允许设置invisible index
+mysql_prepare_alter_table
+ 
+12. 增加优化器优化开关
+optimizer_switch_names
+https://github.com/xiaoboluo768/qianjinliangfang/wiki/optimizer_switch
+sql/sys_vars.cc
+</code></pre></article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents"></nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

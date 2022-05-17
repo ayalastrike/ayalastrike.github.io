@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="设计理念：
+ 对于碎片化的IO会减少实际文件IO读写 写缓冲：对于写，可以合并IO操作，并在写缓冲满时自动调用write写入文件 读缓冲：对于读，多余读出来的数据可以给下次读使用 对于文件设备支持字符设备和块设备 支持多种IO模式，比如缓冲IO/direct IO/aio 对文件操作进行了抽象：4k对齐（按照块粒度读取IO效率最高），缓冲封装在文件操作内部  IO_CACHE初始化
+// 1. seek 如果文件不支持seek，则seek_offset要求为0 // 2. 设置最小对齐块min_cache（16k/8k） // 3. 缩小cachesize：READ_CACHE/SEQ_READ_APPEND下，如果读取范围足够小，则重置cachesize为该范围，并关闭aio // 4. cachesize按照min_cache对齐，如果为SEQ_READ_APPEND，则申请2块，malloc如果失败则缩小3/4重试(128k-&gt;96k)，少于等于min_cache则报错返回  int init_io_cache_ext(IO_CACHE *info, File file, size_t cachesize, enum cache_type type, my_off_t seek_offset, pbool use_async_io, myf cache_myflags, PSI_file_key file_key) { size_t min_cache; my_off_t pos; my_off_t end_of_file= ~(my_off_t) 0; info-&gt;file= file; info-&gt;file_key= file_key; info-&gt;type= TYPE_NOT_SET; // 直到创建append_buffer_lock后才设置type  info-&gt;pos_in_file= seek_offset; info-&gt;pre_close = info-&gt;pre_read = info-&gt;post_read = 0; info-&gt;arg = 0; info-&gt;alloced_buffer = 0; info-&gt;buffer=0; info-&gt;seek_not_done= 0; if (file &gt;= 0) { pos= mysql_file_tell(file, MYF(0)); // 定位文件位置  if ((pos == (my_off_t) -1) &amp;&amp; (my_errno() == ESPIPE)) // 文件不支持seek，再试一次，如果还不行就失败，这种情况下传入的seek_offset要求为0  { info-&gt;seek_not_done= 0; DBUG_ASSERT(seek_offset == 0); } else info-&gt;seek_not_done= MY_TEST(seek_offset !">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="设计理念：
+ 对于碎片化的IO会减少实际文件IO读写 写缓冲：对于写，可以合并IO操作，并在写缓冲满时自动调用write写入文件 读缓冲：对于读，多余读出来的数据可以给下次读使用 对于文件设备支持字符设备和块设备 支持多种IO模式，比如缓冲IO/direct IO/aio 对文件操作进行了抽象：4k对齐（按照块粒度读取IO效率最高），缓冲封装在文件操作内部  IO_CACHE初始化
+// 1. seek 如果文件不支持seek，则seek_offset要求为0 // 2. 设置最小对齐块min_cache（16k/8k） // 3. 缩小cachesize：READ_CACHE/SEQ_READ_APPEND下，如果读取范围足够小，则重置cachesize为该范围，并关闭aio // 4. cachesize按照min_cache对齐，如果为SEQ_READ_APPEND，则申请2块，malloc如果失败则缩小3/4重试(128k-&gt;96k)，少于等于min_cache则报错返回  int init_io_cache_ext(IO_CACHE *info, File file, size_t cachesize, enum cache_type type, my_off_t seek_offset, pbool use_async_io, myf cache_myflags, PSI_file_key file_key) { size_t min_cache; my_off_t pos; my_off_t end_of_file= ~(my_off_t) 0; info-&gt;file= file; info-&gt;file_key= file_key; info-&gt;type= TYPE_NOT_SET; // 直到创建append_buffer_lock后才设置type  info-&gt;pos_in_file= seek_offset; info-&gt;pre_close = info-&gt;pre_read = info-&gt;post_read = 0; info-&gt;arg = 0; info-&gt;alloced_buffer = 0; info-&gt;buffer=0; info-&gt;seek_not_done= 0; if (file &gt;= 0) { pos= mysql_file_tell(file, MYF(0)); // 定位文件位置  if ((pos == (my_off_t) -1) &amp;&amp; (my_errno() == ESPIPE)) // 文件不支持seek，再试一次，如果还不行就失败，这种情况下传入的seek_offset要求为0  { info-&gt;seek_not_done= 0; DBUG_ASSERT(seek_offset == 0); } else info-&gt;seek_not_done= MY_TEST(seek_offset !" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/io_cache/" /><meta property="article:section" content="docs" />
+
+<meta property="article:modified_time" content="2022-05-17T11:37:25&#43;08:00" />
+
+<title>Io Cache | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.c7b43aee56ecc9a14f0cc5206108445af82de23fb44627d2d8356ae83def17d9.js" integrity="sha256-x7Q67lbsyaFPDMUgYQhEWvgt4j&#43;0RifS2DVq6D3vF9k=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning（转）</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化（转）</a></li>
+<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源（转）</a></li>
+<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol（转）</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+<li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
+<li><a href="/docs/MySQL/Server/io_cache/"class=active>IO_CACHE</a></li>
+<li><a href="/docs/MySQL/Server/memory/">Server层的内存管理</a></li>
+<li><a href="/docs/MySQL/Server/invisible_index/">Invisible Index</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+<li><a href="/docs/MySQL/InnoDB/7_storage/">storage</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>Io Cache</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents"></nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><p>设计理念：</p>
+<ol>
+<li>对于碎片化的IO会减少实际文件IO读写</li>
+<li>写缓冲：对于写，可以合并IO操作，并在写缓冲满时自动调用write写入文件</li>
+<li>读缓冲：对于读，多余读出来的数据可以给下次读使用</li>
+<li>对于文件设备支持字符设备和块设备</li>
+<li>支持多种IO模式，比如缓冲IO/direct IO/aio</li>
+<li>对文件操作进行了抽象：4k对齐（按照块粒度读取IO效率最高），缓冲封装在文件操作内部</li>
+</ol>
+<p><strong>IO_CACHE初始化</strong></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#0f0">// 1. seek 如果文件不支持seek，则seek_offset要求为0
+</span><span style="color:#0f0">// 2. 设置最小对齐块min_cache（16k/8k）
+</span><span style="color:#0f0">// 3. 缩小cachesize：READ_CACHE/SEQ_READ_APPEND下，如果读取范围足够小，则重置cachesize为该范围，并关闭aio
+</span><span style="color:#0f0">// 4. cachesize按照min_cache对齐，如果为SEQ_READ_APPEND，则申请2块，malloc如果失败则缩小3/4重试(128k-&gt;96k)，少于等于min_cache则报错返回
+</span><span style="color:#0f0"></span>  
+<span style="color:#ee82ee">int</span> <span style="color:#ff0">init_io_cache_ext</span>(IO_CACHE *info, File file, size_t cachesize,
+                      <span style="color:#f00">enum</span> cache_type type, my_off_t seek_offset,
+                      pbool use_async_io, myf cache_myflags,
+                      PSI_file_key file_key)
+{
+  size_t min_cache;
+  my_off_t pos;
+  my_off_t end_of_file= ~(my_off_t) <span style="color:#f60">0</span>;
+  
+  info-&gt;file= file;
+  info-&gt;file_key= file_key;
+  info-&gt;type= TYPE_NOT_SET;                               <span style="color:#0f0">// 直到创建append_buffer_lock后才设置type
+</span><span style="color:#0f0"></span>  info-&gt;pos_in_file= seek_offset;
+  info-&gt;pre_close = info-&gt;pre_read = info-&gt;post_read = <span style="color:#f60">0</span>;
+  info-&gt;arg = <span style="color:#f60">0</span>;
+  info-&gt;alloced_buffer = <span style="color:#f60">0</span>;
+  info-&gt;buffer=<span style="color:#f60">0</span>;
+  info-&gt;seek_not_done= <span style="color:#f60">0</span>;
+  
+  <span style="color:#f00">if</span> (file &gt;= <span style="color:#f60">0</span>)
+  {
+    pos= mysql_file_tell(file, MYF(<span style="color:#f60">0</span>));                   <span style="color:#0f0">// 定位文件位置
+</span><span style="color:#0f0"></span>    <span style="color:#f00">if</span> ((pos == (my_off_t) -<span style="color:#f60">1</span>) &amp;&amp; (my_errno() == ESPIPE)) <span style="color:#0f0">// 文件不支持seek，再试一次，如果还不行就失败，这种情况下传入的seek_offset要求为0
+</span><span style="color:#0f0"></span>    {
+      info-&gt;seek_not_done= <span style="color:#f60">0</span>;
+      DBUG_ASSERT(seek_offset == <span style="color:#f60">0</span>);
+    }
+    <span style="color:#f00">else</span>
+      info-&gt;seek_not_done= MY_TEST(seek_offset != pos);
+  }
+  
+  info-&gt;disk_writes= <span style="color:#f60">0</span>;
+  info-&gt;share=<span style="color:#f60">0</span>;
+  
+  min_cache=use_async_io ? IO_SIZE*<span style="color:#f60">4</span> : IO_SIZE*<span style="color:#f60">2</span>;         <span style="color:#0f0">// 设置最小对齐块（aio使用16k，否则使用8k）
+</span><span style="color:#0f0"></span>  
+  <span style="color:#f00">if</span> (type == READ_CACHE || type == SEQ_READ_APPEND)
+  {
+    <span style="color:#0f0">// 如果读取范围足够小（end-seek），则将cachesize设小一点，并且不使用aio
+</span><span style="color:#0f0"></span>    <span style="color:#f00">if</span> (!(cache_myflags &amp; MY_DONT_CHECK_FILESIZE))        <span style="color:#0f0">// 假设文件不会增长
+</span><span style="color:#0f0"></span>    {
+      end_of_file= mysql_file_seek(file, <span style="color:#f60">0L</span>, MY_SEEK_END, MYF(<span style="color:#f60">0</span>));<span style="color:#0f0">// 计算文件大小(end)
+</span><span style="color:#0f0"></span>      <span style="color:#0f0">/* Need to reset seek_not_done now that we just did a seek. */</span>
+      info-&gt;seek_not_done= end_of_file == seek_offset ? <span style="color:#f60">0</span> : <span style="color:#f60">1</span>;    <span style="color:#0f0">// 文件大小和查找位置不相同，设置为seek_not_done
+</span><span style="color:#0f0"></span>      <span style="color:#f00">if</span> (end_of_file &lt; seek_offset)                              <span style="color:#0f0">// 查找位置 &gt; 文件大小，end = seek
+</span><span style="color:#0f0"></span>        end_of_file=seek_offset;
+      <span style="color:#f00">if</span> ((my_off_t) cachesize &gt; end_of_file-seek_offset+IO_SIZE*<span style="color:#f60">2</span>-<span style="color:#f60">1</span>)
+      {
+        cachesize= (size_t) (end_of_file-seek_offset)+IO_SIZE*<span style="color:#f60">2</span>-<span style="color:#f60">1</span>;
+        use_async_io=<span style="color:#f60">0</span>;    <span style="color:#0f0">/* No need to use async */</span>
+      }
+    }
+  }
+  cache_myflags &amp;= ~MY_DONT_CHECK_FILESIZE;
+  <span style="color:#f00">if</span> (type != READ_NET &amp;&amp; type != WRITE_NET)
+  {
+    cachesize= ((cachesize + min_cache-<span style="color:#f60">1</span>) &amp; ~(min_cache-<span style="color:#f60">1</span>));       <span style="color:#0f0">// cachesize按照min_cache对齐
+</span><span style="color:#0f0"></span>    <span style="color:#f00">for</span> (;;)
+    {
+      size_t buffer_block;
+      <span style="color:#0f0">/*
+</span><span style="color:#0f0">        Unset MY_WAIT_IF_FULL bit if it is set, to prevent conflict with
+</span><span style="color:#0f0">        MY_ZEROFILL.
+</span><span style="color:#0f0">      */</span>
+      myf flags= (myf) (cache_myflags &amp; ~(MY_WME | MY_WAIT_IF_FULL));
+  
+      <span style="color:#f00">if</span> (cachesize &lt; min_cache)
+        cachesize = min_cache;                                      <span style="color:#0f0">// 最小为一个min_cache
+</span><span style="color:#0f0"></span>      buffer_block= cachesize;
+      <span style="color:#f00">if</span> (type == SEQ_READ_APPEND)                                  <span style="color:#0f0">// 申请2块
+</span><span style="color:#0f0"></span>        buffer_block *= <span style="color:#f60">2</span>;
+      <span style="color:#f00">if</span> (cachesize == min_cache)
+        flags|= (myf) MY_WME;
+  
+      <span style="color:#f00">if</span> ((info-&gt;buffer= (uchar*) my_malloc(key_memory_IO_CACHE, buffer_block, flags)) != <span style="color:#f60">0</span>)
+      {
+        info-&gt;write_buffer=info-&gt;buffer;
+        <span style="color:#f00">if</span> (type == SEQ_READ_APPEND)                                <span style="color:#0f0">// write_buffer指向第二块
+</span><span style="color:#0f0"></span>          info-&gt;write_buffer = info-&gt;buffer + cachesize;
+        info-&gt;alloced_buffer=<span style="color:#f60">1</span>;                                     <span style="color:#0f0">// 标记已malloc
+</span><span style="color:#0f0"></span>        <span style="color:#f00">break</span>;
+      }
+      <span style="color:#f00">if</span> (cachesize == min_cache)
+        DBUG_RETURN(<span style="color:#f60">2</span>);                                             <span style="color:#0f0">// 最小申请容量为min_cache，如果还失败就报错返回
+</span><span style="color:#0f0"></span>  
+      cachesize= (cachesize*<span style="color:#f60">3</span>/<span style="color:#f60">4</span> &amp; ~(min_cache-<span style="color:#f60">1</span>));                  <span style="color:#0f0">// 如果malloc失败，缩小cachesize到原大小的3/4，直到申请成功
+</span><span style="color:#0f0"></span>    }
+  }
+  
+  info-&gt;read_length=info-&gt;buffer_length=cachesize;
+  info-&gt;myflags=cache_myflags &amp; ~(MY_NABP | MY_FNABP);
+  info-&gt;request_pos= info-&gt;read_pos= info-&gt;write_pos = info-&gt;buffer;
+  <span style="color:#f00">if</span> (type == SEQ_READ_APPEND)
+  {
+    info-&gt;append_read_pos = info-&gt;write_pos = info-&gt;write_buffer;
+    info-&gt;write_end = info-&gt;write_buffer + info-&gt;buffer_length;
+    mysql_mutex_init(key_IO_CACHE_append_buffer_lock, &amp;info-&gt;append_buffer_lock, MY_MUTEX_INIT_FAST);
+  }
+  
+  <span style="color:#f00">if</span> (type == WRITE_CACHE)
+    info-&gt;write_end= info-&gt;buffer+info-&gt;buffer_length- (seek_offset &amp; (IO_SIZE-<span style="color:#f60">1</span>));
+  <span style="color:#f00">else</span>
+    info-&gt;read_end=info-&gt;buffer;                                     <span style="color:#0f0">// 初始状态下, 读缓冲为空
+</span><span style="color:#0f0"></span>  
+  <span style="color:#0f0">/* End_of_file may be changed by user later */</span>
+  
+  info-&gt;end_of_file= end_of_file;
+  info-&gt;error=<span style="color:#f60">0</span>;
+  info-&gt;type= type;
+  init_functions(info); <span style="color:#0f0">// 初始化读写函数read_func/write_func
+</span><span style="color:#0f0"></span>  DBUG_RETURN(<span style="color:#f60">0</span>);
+}
+  
+<span style="color:#f00">static</span> <span style="color:#ee82ee">void</span> <span style="color:#ff0">init_functions</span>(IO_CACHE* info)
+{
+  <span style="color:#f00">enum</span> cache_type type= info-&gt;type;
+  <span style="color:#f00">switch</span> (type) {
+  <span style="color:#f00">case</span> READ_NET:
+    <span style="color:#f00">break</span>;
+  <span style="color:#f00">case</span> SEQ_READ_APPEND:
+    info-&gt;read_function = _my_b_seq_read;
+    info-&gt;write_function = <span style="color:#f60">0</span>;         <span style="color:#0f0">// 若使用出core
+</span><span style="color:#0f0"></span>    <span style="color:#f00">break</span>;
+  <span style="color:#f00">default</span>:
+    info-&gt;read_function = info-&gt;share ? _my_b_read_r : _my_b_read;
+    info-&gt;write_function = _my_b_write;
+  }
+  
+  setup_io_cache(info);
+}
+</code></pre></div><p><strong>IO_CACHE读取</strong></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">读取流程：
+<span style="color:#f60">1.</span> 现从读缓冲中读取所有缓冲，拷贝到用户缓冲区
+<span style="color:#f60">2.</span> 计算文件读写位置：实际读取位置为 pos_infile + buffer，并计算该位置相对于<span style="color:#f60">4</span>k对齐的余量（余数diff）
+<span style="color:#f60">3.</span> 如果读取大于<span style="color:#f60">8</span>k，从实际文件中读取（只读取到<span style="color:#f60">4</span>k对齐的位置，余量交由#<span style="color:#f60">4</span>进行），并直接拷贝到用户缓冲区
+<span style="color:#f60">4.</span> 从文件读取&lt;=缓冲区大小的块（<span style="color:#f60">1.</span> 未<span style="color:#f60">4</span>k对齐的，读取<span style="color:#f60">4</span>k-diff大小 <span style="color:#f60">2.</span> 如果文件剩余大小小于缓冲区，一次性读取全部内容），放入读缓冲中
+<span style="color:#f60">5.</span> 从读缓冲中拷贝用户需要的剩余字节给用户缓冲区，并推进read_pos和pos_in_file
+<span style="color:#ee82ee">int</span> _my_b_read[IO_CACHE *info, uchar *Buffer, size_t Count)
+{
+  size_t length;
+  size_t diff_length;
+  size_t left_length;
+  size_t max_length;
+  my_off_t pos_in_file;
+  
+  <span style="color:#0f0">/* If the buffer is not empty yet, copy what is available. */</span>
+  <span style="color:#f00">if</span> ((left_length= (size_t) (info-&gt;read_end-info-&gt;read_pos)))  <span style="color:#0f0">// 如果读缓冲有数据可读（end-pos），则将现有缓冲区的数据拷贝给用户
+</span><span style="color:#0f0"></span>  {
+    memcpy(Buffer,info-&gt;read_pos, left_length);
+    Buffer+=left_length;
+    Count-=left_length;
+  }
+  
+  pos_in_file=info-&gt;pos_in_file+ (size_t) (info-&gt;read_end - info-&gt;buffer); 计算读取的位置 pos = 文件pos - 读缓冲长度，以保证文件pos始终和读缓冲起始点对齐
+  
+  <span style="color:#0f0">// 通过设置seek_not_done设为1暗示在IO_CACHE上进行过针对磁盘的flush/write操作，所以需要重新定位
+</span><span style="color:#0f0"></span>  <span style="color:#f00">if</span> (info-&gt;seek_not_done)
+  {
+    <span style="color:#f00">if</span> ((mysql_file_seek(info-&gt;file, pos_in_file, MY_SEEK_SET, MYF(<span style="color:#f60">0</span>)) != MY_FILEPOS_ERROR))
+    {
+      info-&gt;seek_not_done= <span style="color:#f60">0</span>; <span style="color:#0f0">//如果没有错误，设置为seek已完成
+</span><span style="color:#0f0"></span>    }
+    <span style="color:#f00">else</span>
+    {
+      <span style="color:#0f0">// 如果seek失败，且错误号为ESPIPE，则意味着文件为pipe/socket/FIFO，不再重试，直接返回错误
+</span><span style="color:#0f0"></span>      DBUG_ASSERT(my_errno() != ESPIPE);
+      info-&gt;error= -<span style="color:#f60">1</span>;
+      DBUG_RETURN(<span style="color:#f60">1</span>);
+    }
+  }
+  
+  diff_length= (size_t) (pos_in_file &amp; (IO_SIZE-<span style="color:#f60">1</span>));  <span style="color:#0f0">// 如果之前读取到一半中断过，则找到IO_SIZE对齐后的多余字节(diff)
+</span><span style="color:#0f0"></span>  
+  <span style="color:#0f0">// 如果要读取的大小(Count+diff)超过2个IO_SIZE，读取文件，并且不填充读缓冲
+</span><span style="color:#0f0"></span>  <span style="color:#f00">if</span> (Count &gt;= (size_t) (IO_SIZE+(IO_SIZE-diff_length)))
+  {         <span style="color:#0f0">/* Fill first intern buffer */</span>
+    size_t read_length;
+    <span style="color:#f00">if</span> (info-&gt;end_of_file &lt;= pos_in_file) <span style="color:#0f0">// 如果读取点在文件尾部之外，则返回错误，并通过error告知读取到的部分内容
+</span><span style="color:#0f0"></span>    {
+      info-&gt;error= (<span style="color:#ee82ee">int</span>) left_length;
+      DBUG_RETURN(<span style="color:#f60">1</span>);
+    }
+    <span style="color:#0f0">// 计算按照IO_SIZE对齐后需要读取的大小（减去多余字节），进行实际的文件读取，并进行4k对齐
+</span><span style="color:#0f0"></span>    length=(Count &amp; (size_t) ~(IO_SIZE-<span style="color:#f60">1</span>))-diff_length;
+    <span style="color:#f00">if</span> ((read_length= mysql_file_read(info-&gt;file, Buffer, length, info-&gt;myflags)) != length)
+    {
+      <span style="color:#0f0">/*
+</span><span style="color:#0f0">        If we didn&#39;t get, what we wanted, we either return -1 for a read
+</span><span style="color:#0f0">        error, or (it&#39;s end of file), how much we got in total.
+</span><span style="color:#0f0">      */</span>
+      <span style="color:#0f0">// 返回-1或者部分读到的数据
+</span><span style="color:#0f0"></span>      info-&gt;error= (read_length == (size_t) -<span style="color:#f60">1</span> ? -<span style="color:#f60">1</span> : (<span style="color:#ee82ee">int</span>) (read_length+left_length));
+      DBUG_RETURN(<span style="color:#f60">1</span>);
+    }
+    Count-=length;
+    Buffer+=length;
+    pos_in_file+=length;
+    left_length+=length;
+    diff_length=<span style="color:#f60">0</span>;
+  }
+  
+  <span style="color:#0f0">// 填充读缓冲
+</span><span style="color:#0f0"></span>  <span style="color:#0f0">// 计算除4k对齐外还需要读取的字节数 = 读缓冲长度-对齐外剩余字节（diff）
+</span><span style="color:#0f0"></span>  max_length= info-&gt;read_length-diff_length;
+  <span style="color:#0f0">// 如果文件剩余长度小于读缓冲，则读取文件所有剩余长度
+</span><span style="color:#0f0"></span>  <span style="color:#f00">if</span> (info-&gt;type != READ_FIFO &amp;&amp; max_length &gt; (info-&gt;end_of_file - pos_in_file))
+    max_length= (size_t) (info-&gt;end_of_file - pos_in_file);
+  
+  <span style="color:#0f0">// 如果文件无剩余内容可读，则返回错误
+</span><span style="color:#0f0"></span>  <span style="color:#f00">if</span> (!max_length)
+  {
+    <span style="color:#f00">if</span> (Count)
+    {
+      <span style="color:#0f0">/* We couldn&#39;t fulfil the request. Return, how much we got. */</span>
+      info-&gt;error= (<span style="color:#ee82ee">int</span>)left_length;
+      DBUG_RETURN(<span style="color:#f60">1</span>);
+    }
+    length=<span style="color:#f60">0</span>;
+  } <span style="color:#f00">else</span> <span style="color:#ff0">if</span> ((length= mysql_file_read(info-&gt;file, info-&gt;buffer, max_length, info-&gt;myflags)) &lt; Count ||
+     length == (size_t) -<span style="color:#f60">1</span>) <span style="color:#0f0">// 遇到读取错误，没有读到所需的大小（Count）或者读到EOF（-1）
+</span><span style="color:#0f0"></span>  {
+    <span style="color:#0f0">/*
+</span><span style="color:#0f0">      We got an read error, or less than requested (end of file).
+</span><span style="color:#0f0">      If not a read error, copy, what we got.
+</span><span style="color:#0f0">    */</span>
+    <span style="color:#f00">if</span> (length != (size_t) -<span style="color:#f60">1</span>)          <span style="color:#0f0">// 遇到读取错误，将已读到的内容拷贝给用户Buffer
+</span><span style="color:#0f0"></span>      memcpy(Buffer, info-&gt;buffer, length);
+    info-&gt;pos_in_file= pos_in_file;     <span style="color:#0f0">// 设置文件偏移量
+</span><span style="color:#0f0"></span>    info-&gt;error= length == (size_t) -<span style="color:#f60">1</span> ? -<span style="color:#f60">1</span> : (<span style="color:#ee82ee">int</span>) (length+left_length); <span style="color:#0f0">// error设置为-1（EOF）或已读到的字节数
+</span><span style="color:#0f0"></span>    info-&gt;read_pos=info-&gt;read_end=info-&gt;buffer; <span style="color:#0f0">// 读缓冲重置为空
+</span><span style="color:#0f0"></span>    DBUG_RETURN(<span style="color:#f60">1</span>);
+  }
+  
+  info-&gt;read_pos=info-&gt;buffer+Count;
+  info-&gt;read_end=info-&gt;buffer+length;
+  info-&gt;pos_in_file=pos_in_file;
+  memcpy(Buffer, info-&gt;buffer, Count);
+  DBUG_RETURN(<span style="color:#f60">0</span>);
+}
+</code></pre></div></article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents"></nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

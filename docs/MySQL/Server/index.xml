@@ -11,7 +11,8 @@
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/docs/MySQL/Server/8.0_net_optimize/</guid>
-      <description>Administrative Connection Management #  如果MySQL连接连接被打满，有时甚至连root也无法登录去kill。
+      <description>（转载自阿里内核月报）
+Administrative Connection Management #  如果MySQL连接连接被打满，有时甚至连root也无法登录去kill。
 对于这个问题，目前已有的解法有：
  各家的线程池提供了extra_port。 Alibaba RDS MySQL的做法是把connection的个数拆分成不同的使用目的，例如系统维护账户占用一部分，用户账户占用一部分，两者不互相影响。  MySQL 8.0提供了administrative-connection-interface的机制（由facebook贡献），即提供单独的network interface并且可以单独配置一个pthread用于listen。
 参数如下：
@@ -31,11 +32,12 @@ worklog：WL#9250: Split LOCK_thd_list and LOCK_thd_remove mutexes</description>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/docs/MySQL/Server/8.0_resource_group/</guid>
-      <description>ＭySQL8.0增加了一个新功能resource group，可以对不同的用户进行资源控制，例如对用户线程和后台系统线程给予不同的CPU优先级。
+      <description>（转载自阿里内核月报）
+ＭySQL8.0增加了一个新功能resource group，可以对不同的用户进行资源控制，例如对用户线程和后台系统线程给予不同的CPU优先级。
 用户可以通过SQL接口创建不同的分组，这些分组可以作为sql的hit，也可以动态的绑定过去。本文主要简单介绍下用法，至于底层如何实现的，其实比较简单：创建的分组被存储到系统表中；在linux系统底层通过CPU_SET来绑定CPU，通过setpriority来设置线程的nice值
 worklog: WL#9467: Resource Groups
 创建resource group #  系统自带两个resource group（不可修改）：
- FOREGROUND (FG) - &amp;ldquo;user&amp;rdquo; threads BACKGROUND (BG) - &amp;ldquo;system&amp;rdquo; threads (internal Engine threads, e.g. &amp;ldquo;purge&amp;quot;in InnoDB, etc.)  mysql&amp;gt; SELECT * FROM INFORMATION_SCHEMA.RESOURCE_GROUPS\G *************************** 1. row *************************** RESOURCE_GROUP_NAME: USR_default RESOURCE_GROUP_TYPE: USER RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 *************************** 2. row *************************** RESOURCE_GROUP_NAME: SYS_default RESOURCE_GROUP_TYPE: SYSTEM RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 2 rows in set (0.00 sec) 只有超级账户启动mysqld才能设置thread priority，否则只能降低而不能提升优先级。（-20最高，20最低）</description>
+ FOREGROUND (FG) - &amp;ldquo;user&amp;rdquo; threads BACKGROUND (BG) - &amp;ldquo;system&amp;rdquo; threads (internal Engine threads, e.g. &amp;ldquo;purge&amp;quot;in InnoDB, etc.)  mysql&amp;gt; SELECT * FROM INFORMATION_SCHEMA.RESOURCE_GROUPS\G *************************** 1. row *************************** RESOURCE_GROUP_NAME: USR_default RESOURCE_GROUP_TYPE: USER RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 *************************** 2. row *************************** RESOURCE_GROUP_NAME: SYS_default RESOURCE_GROUP_TYPE: SYSTEM RESOURCE_GROUP_ENABLED: 1 VCPU_IDS: 0-63 THREAD_PRIORITY: 0 2 rows in set (0.</description>
     </item>
     
     <item>
@@ -61,11 +63,38 @@ mysqld_main init_common_variables Connection_handler_manager::init() // 初始�
     
     <item>
       <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/invisible_index/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/invisible_index/</guid>
+      <description>是否使用索引对性能影响很大。在数据库运维过程中，索引的删除总是慎重的，一方面是因为实际的DDL变更代价，一方面是评估对性能的影响。
+为了减少删除索引的代价，MySQL 8.0引入了invisible index，用于解决这个问题。
+即在索引上增加一个invisible的属性，用于optimizer可以将其忽略掉。
+从这里也可以看到，引入的带动在server层，不涉及到存储引擎，所以所有的存储引擎都适用。
+MySQL的实现基本参考的是Oracle 12c。
+MySQL 8.0.0 Release Notes
+ Optimizer Notes  MySQL now supports invisible indexes. An invisible index is not used by the optimizer at all, but is otherwise maintained normally. Indexes are visible by default. Invisible indexes make it possible to test the effect of removing an index on query performance, without making a destructive change that must be undone should the index turn out to be required.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/io_cache/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/io_cache/</guid>
+      <description>设计理念：
+ 对于碎片化的IO会减少实际文件IO读写 写缓冲：对于写，可以合并IO操作，并在写缓冲满时自动调用write写入文件 读缓冲：对于读，多余读出来的数据可以给下次读使用 对于文件设备支持字符设备和块设备 支持多种IO模式，比如缓冲IO/direct IO/aio 对文件操作进行了抽象：4k对齐（按照块粒度读取IO效率最高），缓冲封装在文件操作内部  IO_CACHE初始化
+// 1. seek 如果文件不支持seek，则seek_offset要求为0 // 2. 设置最小对齐块min_cache（16k/8k） // 3. 缩小cachesize：READ_CACHE/SEQ_READ_APPEND下，如果读取范围足够小，则重置cachesize为该范围，并关闭aio // 4. cachesize按照min_cache对齐，如果为SEQ_READ_APPEND，则申请2块，malloc如果失败则缩小3/4重试(128k-&amp;gt;96k)，少于等于min_cache则报错返回  int init_io_cache_ext(IO_CACHE *info, File file, size_t cachesize, enum cache_type type, my_off_t seek_offset, pbool use_async_io, myf cache_myflags, PSI_file_key file_key) { size_t min_cache; my_off_t pos; my_off_t end_of_file= ~(my_off_t) 0; info-&amp;gt;file= file; info-&amp;gt;file_key= file_key; info-&amp;gt;type= TYPE_NOT_SET; // 直到创建append_buffer_lock后才设置type  info-&amp;gt;pos_in_file= seek_offset; info-&amp;gt;pre_close = info-&amp;gt;pre_read = info-&amp;gt;post_read = 0; info-&amp;gt;arg = 0; info-&amp;gt;alloced_buffer = 0; info-&amp;gt;buffer=0; info-&amp;gt;seek_not_done= 0; if (file &amp;gt;= 0) { pos= mysql_file_tell(file, MYF(0)); // 定位文件位置  if ((pos == (my_off_t) -1) &amp;amp;&amp;amp; (my_errno() == ESPIPE)) // 文件不支持seek，再试一次，如果还不行就失败，这种情况下传入的seek_offset要求为0  { info-&amp;gt;seek_not_done= 0; DBUG_ASSERT(seek_offset == 0); } else info-&amp;gt;seek_not_done= MY_TEST(seek_offset !</description>
+    </item>
+    
+    <item>
+      <title></title>
       <link>https://ayalastrike.github.io/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/</guid>
-      <description>MariaDB MaxScale 是一款数据库中间件，可以按照语义分发语句到多个数据库服务器上。它对应用程序透明，可以提供读写分离、负载均衡和高可用服务。
+      <description>（转载自阿里内核月报）
+MariaDB MaxScale 是一款数据库中间件，可以按照语义分发语句到多个数据库服务器上。它对应用程序透明，可以提供读写分离、负载均衡和高可用服务。
 proxy protocol 是 MaxScale 引入，为了解决使用proxy作为中间件连接mysql时，mysql获取client ip用 client通过proxy中间价连接mysql时，mysql server接收到认证报文中，包含的是proxy节点的IP。如果mysql.user表中指定了client的IP，无法通过认证。
 一种传统处理方式是在proxy节点上保存client的ip和密码，用于client的认证，而在mysql server上使用另一套ip和密码用于proxy 节点到mysql server的认证。
 MariaDB MaxScale引入了proxy protocol来解决client ip透传的问题。proxy节点获取到client ip后，把client ip包装在proxy protocol报文中发给server，server解析到了proxy protocol报文，再用报文中的ip替换proxy节点的ip
@@ -92,6 +121,25 @@ MySQL加锁的顺序
 SQL → open table → 加MDL锁 → 加表锁 → 加InnoDB锁 → SQL执行 → 释放MDL锁 → 释放表锁 → 释放InnoDB锁
 其中表锁是通过thr_lock提供的，在MySQL 5.7.5中，thr_lock被MDL替换：
 Scalability for InnoDB tables was improved by avoiding THR_LOCK locks.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/memory/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/memory/</guid>
+      <description>在MySQL中，为了高效，Server层也有自己的内存管理。
+首先先介绍最简单的单链表内存管理，然后再介绍基于此优化的MEM_ROOT内存管理。
+单链表内存管理 #  在server层中，对于字符集处理，使用单链表的内存管理来处理内存资源。
+正如Monty在comments中写的：
+Wed Jun 21 01:34:04 1989 Monty (monty at monty)
+** Added two new malloc-functions: my_once_alloc() and* *my_once_free(). These give easyer and quicker startup.*
+ 分配内存、释放全部内存由my_once_alloc、my_once_free负责，my_once_strdup和my_once_memdup则是wrapper，内部封装了alloc+memcpy。
+alloc策略如下：
+ 采用单向链表的方式将多个malloc的内存块管理起来 每个内存块采用malloc_chunk + raw的方式，即内存控制块+实际数据使用块两部分 raw部分如果剩余可用，则直接从其中划分，减少malloc开销 如果申请量小且现有的left小于4k，则对齐到4k  从这里可以看出，#3，#4一方面可以减少malloc的系统调用次数和碎片，同时，尽量按照4k对齐申请。
+另外，可以通过my_flags设定分配属性：
+ MY_FAE /* Fatal if any error */ 内存分配失败就退出整个进程 MY_WME /* Write message on error */ 记录到日志中 MY_ZEROFILL /* Fill array with zero */ 分配内存后初始化为0  相关代码和示例如下：</description>
     </item>
     
     <item>
@@ -136,7 +184,8 @@ OK Packet #  do_command dispatch_command THD::send_statement_status // 根据这
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/docs/MySQL/Server/returning/</guid>
-      <description>背景 #  MySQL对于statement执行结果报文通常分为两类：Resultset和OK/ERR，针对 DML语句则返回OK/ERR报文，其中包括几个影响记录，扫描记录等属性。但在很多业务场景下，通常 INSERT/UPDATE/DELETE 这样的DML语句后，都会跟随SELECT查询当前记录内容，以进行接下来的业务处理， 为了减少一次 Client &amp;lt;-&amp;gt; DB Server 交互，类似 PostgreSQL / Oracle 都提供了 returning clause 支持 DML 返回 Resultset。
+      <description>（转载自阿里内核月报）
+背景 #  MySQL对于statement执行结果报文通常分为两类：Resultset和OK/ERR，针对 DML语句则返回OK/ERR报文，其中包括几个影响记录，扫描记录等属性。但在很多业务场景下，通常 INSERT/UPDATE/DELETE 这样的DML语句后，都会跟随SELECT查询当前记录内容，以进行接下来的业务处理， 为了减少一次 Client &amp;lt;-&amp;gt; DB Server 交互，类似 PostgreSQL / Oracle 都提供了 returning clause 支持 DML 返回 Resultset。
 AliSQL 为了减少对 MySQL 语法兼容性的侵入，并支持 returning 功能， 采用了 native procedure 的方式，使用DBMS_TRANS package，统一使用 returning procedure 来支持 DML 语句返回 Resultset。
 语法 #  DBMS_TRANS.returning(Field_list=&amp;gt;, Statement=&amp;gt;); 其中:
  Field list : 代表期望的返回字段，以 “,” 进行分割，支持 * 号表达； Statement ：表示要执行的DML 语句， 支持 INSERT / UPDATE / DELETE；  INSERT Returning #  针对 insert 语句， returning proc 返回插入到表中的记录内容；</description>
