@@ -18,14 +18,14 @@ spatial control 空间控制
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/InnoDB/8_buffer_pool/" /><meta property="article:section" content="docs" />
 
-<meta property="article:modified_time" content="2022-05-17T22:17:48&#43;08:00" />
+<meta property="article:modified_time" content="2022-05-18T17:54:20&#43;08:00" />
 
 <title>8 Buffer Pool | Rick&#39;s Blog</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.6be3defbefc3c3cfbcfd8620fdf805f2d51129718ee237d4692e961586ac8b9c.js" integrity="sha256-a&#43;Pe&#43;&#43;/Dw8&#43;8/YYg/fgF8tURKXGO4jfUaS6WFYasi5w=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.e2320b33b42b5256c1fe2fe55f317f3d90688e30dff3bae6bd41c52b1562f6ab.js" integrity="sha256-4jILM7QrUlbB/i/lXzF/PZBojjDf87rmvUHFKxVi9qs=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -174,6 +174,14 @@ https://github.com/alex-shpak/hugo-book
         <li><a href="#buffer-pool-instance">buffer pool instance</a></li>
       </ul>
     </li>
+    <li><a href="#buffer-pool的管理">buffer pool的管理</a>
+      <ul>
+        <li><a href="#buffer-pool的组织">buffer pool的组织</a></li>
+        <li><a href="#页的状态">页的状态</a></li>
+        <li><a href="#lru算法">LRU算法</a></li>
+        <li><a href="#lru链表的维护">LRU链表的维护</a></li>
+      </ul>
+    </li>
   </ul>
 </nav>
 
@@ -229,7 +237,8 @@ https://github.com/alex-shpak/hugo-book
 <p>控制块和其中的元信息、数据页之间的关系如下图所示：</p>
 <p><img src="/InnoDB_buffer_pool_page_&amp;_block.png" alt="InnoDB_buffer_pool_page_&amp;amp;_block" /></p>
 <p>从上面的页和控制块布局可以看出，buf_block_t中的第一个字段（必须）就是buf_page_t，以保证page table指向的buf_block_t和buf_page_t两种类型的指针可以相互转换。block→frame指向真正存放数据的数据页。</p>
-<p>buf_page_t实际上存放的是数据页的元信息：page size、state、oldest_modification、newest_modification、access_time等等。</p>
+<p>buf_page_t实际上存放的是数据页的元信息：page size、state、oldest_modification、newest_modification、access_time等等。如果某个压缩页被解压了，解压页的数据指针是存储在buf_block_t的frame字段里。</p>
+<p>如果对表进行了压缩，则对应的数据页称为压缩页，如果需要从压缩页中读取数据，则压缩页需要先解压，形成解压页，解压页为16KB。压缩页的大小是在建表的时候指定，目前支持16K，8K，4K，2K，1K。即使压缩页大小设为16K，在blob/varchar/text的类型中也有一定好处。假设指定的压缩页大小为4K，如果有个数据页无法被压缩到4K以下，则需要做B-tree分裂操作，这是一个比较耗时的操作。正常情况下，Buffer Pool中会把压缩和解压页都缓存起来，当Free List不够时，按照系统当前的实际负载来决定淘汰策略。如果系统瓶颈在IO上，则只驱逐解压页，压缩页依然在Buffer Pool中，否则解压页和压缩页都被驱逐。</p>
 <h2 id="buffer-chunk">
   buffer chunk
   <a class="anchor" href="#buffer-chunk">#</a>
@@ -319,6 +328,75 @@ Hash table size 276671, used cells 15, node heap has 1 buffer(s)
 </h2>
 <p>在MySQL 5.5中，为了提高buffer pool的并发性能，将pool划分为多个instance，一页只会存在于一个instance中（通过page_id（space_id+page_no）hash后按instance_num取模），这样，buf_pool_t表示了一个buffer pool instance。各个instance之间没有竞争关系，之前介绍的buffer pool中的各个逻辑链表、buffer chunks，以及mutex都在每个instance中。</p>
 <p>特别的，instace不能过多也不能过小，否则会有性能问题：当buffer pool小于1GB时，只会有1个instance，而最多有64个（使用6 bit表示instance no）。</p>
+<h1 id="buffer-pool的管理">
+  buffer pool的管理
+  <a class="anchor" href="#buffer-pool%e7%9a%84%e7%ae%a1%e7%90%86">#</a>
+</h1>
+<h2 id="buffer-pool的组织">
+  buffer pool的组织
+  <a class="anchor" href="#buffer-pool%e7%9a%84%e7%bb%84%e7%bb%87">#</a>
+</h2>
+<p>从上面的介绍可以看出，buffer pool把页作为基本单位，并通过block作为控制块，然后再组合成一个chunk，多个chunk组合成一个instance。因此，buffer pool的层次结构如下图所示：</p>
+<p><img src="/InnoDB_buffer_pool_hierarchical.png" alt="InnoDB_buffer_pool_hierarchical" /></p>
+<h2 id="页的状态">
+  页的状态
+  <a class="anchor" href="#%e9%a1%b5%e7%9a%84%e7%8a%b6%e6%80%81">#</a>
+</h2>
+<p>页的状态一共有8种。理解这8种状态和其相互转换的关系，对buffer pool的页管理机制会有更清晰直观的理解。</p>
+<p>页的状态流转图如下：</p>
+<p><img src="/InnoDB_buffer_pool_buf_page_state.png" alt="InnoDB_buffer_pool_buf_page_state" /></p>
+<p>下面依次解释一下这8种状态：</p>
+<ul>
+<li>
+<p>BUF_BLOCK_NOT_USED：处于free链表中的数据页，都是此状态。此状态为长态。</p>
+</li>
+<li>
+<p>BUF_BLOCK_READY_FOR_USE：当从free链表中获取一个空闲的数据时，状态会从BUF_BLOCK_NOT_USED变为BUF_BLOCK_READY_FOR_USE（buf_LRU_get_free_block)。这个状态为暂态，处于这个状态的数据页不处于任何逻辑链表中。</p>
+</li>
+<li>
+<p>BUF_BLOCK_FILE_PAGE：也称为buffered file page，正常被使用的数据页都是这种状态。LRU链表中的大部分数据页都是这种状态。此状态为长态。</p>
+</li>
+<li>
+<p>BUF_BLOCK_MEMORY：也称为memory object，缓冲池中的非用户数据页（存储系统信息，例如InnoDB行锁，自适应哈希索引以及压缩页的数据等）被标记为BUF_BLOCK_MEMORY。处于这个状态的数据页不处于任何逻辑链表中。此状态为长态。</p>
+</li>
+<li>
+<p>BUF_BLOCK_REMOVE_HASH：当加入free链表之前，需要先从page hash移除。这种状态就表示此页面已经从page hash移除，但是还没被加入到free链表时的中间状态。</p>
+</li>
+<li>
+<p>BUF_BLOCK_POOL_WATCH：被哨兵看管的数据页。这种类型的page是提供给purge线程用的。InnoDB为了实现MVCC，需要把之前的数据记录在undo log中，如果没有读请求再需要它，就可以通过purge线程删除。换句话说，purge线程需要知道某些数据页是否被读取，实现的方式（buf_pool_watch_set）是首先查看page hash，看看这个数据页是否已经被读入，如果没有读入，则获取一个BUF_BLOCK_POOL_WATCH类型的哨兵数据页控制体，同时加入page_hash中（但其中并没有真正的数据：buf_block_t::frame为空），并把其类型置为BUF_BLOCK_ZIP_PAGE（表示已经被使用了，其他purge线程就不会用到这个控制体了）。如果查看page hash后发现有这个数据页，只需要判断控制体在内存中的地址是否属于Buffer Chunks即表示对应数据页已经被其他线程读入（buf_pool_watch_occurred）。另一方面，如果用户线程需要这个数据页，先查看page hash是否为BUF_BLOCK_POOL_WATCH类型的数据页，如果是则回收，从free链表（即在buffer chunks中）分配一个空闲的控制体，填入数据。这里的核心思想就是通过控制体在内存中的地址来确定数据页是否还在被使用。此状态为暂态。</p>
+<blockquote class="book-hint info">
+  每个缓冲池instance配置配置<a href="https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_purge_threads">purge thread</a>（默认：4）个哨兵数据页控制体，通过buffer_pool-&gt;watch数组管理。
+</blockquote>
+
+</li>
+<li>
+<p>BUF_BLOCK_ZIP_PAGE：也称为clean compressed page（不全面，未包含purge语音）。当从磁盘读取压缩页时，先通过malloc分配一个临时的buf_page_t，然后从伙伴系统中分配出压缩页存储的空间，把磁盘中读取的压缩数据存入其中，然后把这个临时的buf_page_t标记为BUF_BLOCK_ZIP_PAGE状态（buf_page_init_for_read），当这个压缩页被解压时，将页状态修改为BUF_BLOCK_FILE_PAGE，并加入LRU List和Unzip LRU List（buf_page_get_gen）。如果一个压缩页对应的解压页被evict，但是需要保留这个压缩页并且该压缩页不是脏页，则这个压缩页被标记为BUF_BLOCK_ZIP_PAGE（buf_LRU_free_page）。所以正常情况下，处于BUF_BLOCK_ZIP_PAGE状态的不会很多。前面两种被标记为BUF_BLOCK_ZIP_PAGE的压缩页都在LRU list中。另外，上面提到的WATCH状态可以得知，如果被某个purge线程使用了，也会被标记为BUF_BLOCK_ZIP_PAGE。</p>
+</li>
+<li>
+<p>BUF_BLOCK_ZIP_DIRTY：即在flush链表中的compressed page。如果一个压缩页对应的解压页被evict，但是需要保留这个压缩页并且该压缩页是脏页，则被标记为BUF_BLOCK_ZIP_DIRTY（buf_LRU_free_page）。如果该压缩页随后又被解压，则状态会变为BUF_BLOCK_FILE_PAGE。因此BUF_BLOCK_ZIP_DIRTY也是暂态。这种类型的数据页都在flush list中。</p>
+</li>
+</ul>
+<p>整体来说，大部分的数据页都处于BUF_BLOCK_NOT_USED状态（在free链表中）和BUF_BLOCK_FILE_PAGE状态（大部分处于LRU链表中，LRU链表中还包含除被purge线程标记的BUF_BLOCK_ZIP_PAGE状态的数据页），少部分处于BUF_BLOCK_MEMORY状态，极少数处于其他状态。前三种状态的数据页都不在buffer chunks上，对应的控制体都是临时分配的，这三种状态也称为invalid state（buf_block_state_valid）。</p>
+<h2 id="lru算法">
+  LRU算法
+  <a class="anchor" href="#lru%e7%ae%97%e6%b3%95">#</a>
+</h2>
+<p>InnoDB有两种LRU算法：</p>
+<ul>
+<li>朴素的LRU算法：当LRU链表的长度小于BUF_LRU_OLD_MIN_LEN（512）时启用，即读到的buf_page放入LRU链表的头部，即不区分冷区和热区。</li>
+<li>LRU-K（midpoint insertion strategy）：当链表长度大于BUF_LRU_OLD_MIN_LEN时启用，区分冷热区。</li>
+</ul>
+<p>LRU链表的布局如下图所示：</p>
+<p><img src="/InnoDB_buffer_pool_LRU_algo.png" alt="InnoDB_buffer_pool_LRU_algo" /></p>
+<p>old的位置由buf_pool_t中的变量LRU_old（点位）、LRU_old_len（OLD区长度）进行维护。随着链表的不断增大，InnoDB还需要维护这些变量（buf_LRU_old_adjust_len），目的就是将buf_pool→LRU_old指向LRU链表长度的3/8处。同时，引入了BUF_LRU_OLD_TOLERANCE（20）来防止链表调整过频繁，只有查过该barrier才进行调整。其中，buf_page-&gt;old表示LRU中的页（buf_page-&gt;in_LRU_list=true）是处于OLD/NEW区。</p>
+<h2 id="lru链表的维护">
+  LRU链表的维护
+  <a class="anchor" href="#lru%e9%93%be%e8%a1%a8%e7%9a%84%e7%bb%b4%e6%8a%a4">#</a>
+</h2>
+<p>当读取页时，需要对LRU链表进行维护（buf_page_peek_if_too_old）。根据LRU算法，数据库总是希望经常访问的页保持在LRU中。当LRU List链表大于512（BUF_LRU_OLD_MIN_LEN）时，在逻辑上被分为两部分：冷区和热区。新读取进来的页面默认被放在冷区，在经过innodb_old_blocks_time（1000ms）后，如果再次被访问了，就移到热区。另外，如果一个数据页在读入缓冲池后，在innodb_old_blocks_time时间窗口内被多次访问，之后却不再访问，也认为需要驱逐（待在冷区）。而如果一个页面已经处在热区，再次访问时，只有处于热区1/4（近似值）部分外，才会移动到热区的头部。这样的目的是为了避免LRU的频繁修改，因为每次访问都移动LRU，会影响性能。</p>
+<p><img src="/InnoDB_buffer_pool_LRU.png" alt="InnoDB_buffer_pool_LRU" /></p>
+<p>LRU相关的函数调用链如下：</p>
+<p><img src="/InnoDB_buffer_pool_LRU_chain.png" alt="InnoDB_buffer_pool_LRU_chain" /></p>
 </article>
  
       
@@ -367,6 +445,14 @@ Hash table size 276671, used cells 15, node heap has 1 buffer(s)
         <li><a href="#buffer-chunk">buffer chunk</a></li>
         <li><a href="#buffer-pool中的页链表">buffer pool中的页链表</a></li>
         <li><a href="#buffer-pool-instance">buffer pool instance</a></li>
+      </ul>
+    </li>
+    <li><a href="#buffer-pool的管理">buffer pool的管理</a>
+      <ul>
+        <li><a href="#buffer-pool的组织">buffer pool的组织</a></li>
+        <li><a href="#页的状态">页的状态</a></li>
+        <li><a href="#lru算法">LRU算法</a></li>
+        <li><a href="#lru链表的维护">LRU链表的维护</a></li>
       </ul>
     </li>
   </ul>
