@@ -119,6 +119,19 @@ fil_system_t、fil_space_t、fil_node_t的关系如图所示：
     
     <item>
       <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/8_buffer_pool/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/8_buffer_pool/</guid>
+      <description>基于磁盘的数据库系统通常都是用缓冲池（buffer pool）技术来弥补CPU和磁盘之间的速度鸿沟。
+通过以下机制来达成目标：
+spatial control 空间控制
+ where to write pages on disk. the goal is to keep pages that are used together often as physically close together as possible on disk.  temporal control 时间控制
+ when to read pages into memory, and when to write them to disk. the goal is minimize the number of stalls from having to read data from disk.  概述 #  buffer pool #  InnoDB是基于磁盘存储的存储引擎，磁盘中的记录以页为单位进行管理。</description>
+    </item>
+    
+    <item>
+      <title></title>
       <link>https://ayalastrike.github.io/docs/MySQL/Server/8.0_net_optimize/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
@@ -330,7 +343,20 @@ The THD is a large data structure which is used to keep track of various aspects
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/docs/MySQL/Server/ThreadPool/</guid>
-      <description></description>
+      <description>背景 #  高并发场景 #  在高并发场景（访问共享资源）下，随着用户（并发）的增加，有以下两个挑战：
+  latency在后期成指数型增长  吞吐下降严重
+  造成这种现象的根本原因是通信、处理和同步成本大幅升高，最终达到处理极限，导致数据库的服务能力大幅下降，甚至无法响应请求。
+为了处理这种情况，有两种思路：
+  在系统达到预设性能指标时，采用管制措施保护数据库，使之可以持续提供稳定的服务。 这种方式称之为限流（aka “on-ramp metering”），由交通信号灯来控制多少车辆可以在峰值时通过。如下图所示：
+  另一种方式是线程池机制，减少内部的线程上下文切换开销、热点资源的竞争，提升CPU上有效代码的执行效率，同时也具备控制流量的能力。
+  我们最终期望实现的效果是：技术选型 #  MySQL的处理模型 #  现有的MySQL的请求处理架构采用的是单进程多线程方案，每个用户连接对应一个MySQL处理线程（后面称为工作线程），在这种情况下，随着用户连接数的增多，MySQL进程会创建大量的工作线程，系统性能在高并发场景下会有大幅的下降。
+而导致性能下降主要是这三个原因造成的：
+ CPU cache miss 线程的上下文切换 热点共享资源的竞争（latch、锁&amp;hellip;）  采用线程池，则可以有针对性的对上述三点进行优化：将MySQL的工作线程和用户连接解绑，同一个工作线程应对多个用户连接上的请求：当前的用户请求处理完成后，工作线程再选择其他的用户请求进行处理。保证合理数量的工作线程提供可持续的处理能力，并且CPU cache的使用更高效，可以有效的降低线程的上下文切换代价，同时热点资源竞争的开销也随之降低，也降低了死锁发生的概率。
+线程池机制更加适用于OLTP场景（short CPU-bound queries），对于OLAP场景可能会产生护航（convey）问题。
+从某种程度上来看，线程池分离了连接资源（请求）和线程资源（处理）。
+不适用场景 #  线程池并不是万能的，对于以下几类场景并不适用：
+ 间歇性的workload：这会导致不断的分配/回收线程资源。 OLTP大查询：大量并发、长时间的复杂查询，如果占满了所有处理线程，后续的请求会进行排队，造成latency的增加。 大量的消耗极小的简单查询：比如select 1，大量瞬间涌入的请求，如果进行排队可能也会造成latency的增加。 极高并发的prepared statement：prepared statement所使用的MySQL Binary Protocol会使交互往返多次，可能会造成请求的堆积。  效果 #  线程池的性能对比，这里参考官方给出的性能数据：
+60x Better Scalability: Read/Write (8192/128)</description>
     </item>
     
     <item>
@@ -366,7 +392,7 @@ The VIO routines are wrappers for the various network I/O calls that happen with
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/menu/</guid>
-      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning（转）   NET VIO MySQL 8.0 对网络模块的优化（转） MySQL 8.0 通过Resource Group来控制线程计算资源（转） MariaDB MaxScale Proxy Protocol（转）   Timeout机制 Thread Pool MDL IO_CACHE Server层的内存管理 Invisible Index   InnoDB  概览 源码结构 基本数据结构和算法 os record page storage      </description>
+      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning（转）   NET VIO MySQL 8.0 对网络模块的优化（转） MySQL 8.0 通过Resource Group来控制线程计算资源（转） MariaDB MaxScale Proxy Protocol（转）   Timeout机制 Thread Pool MDL IO_CACHE Server层的内存管理 Invisible Index   InnoDB  概览 源码结构 基本数据结构和算法 os record page storage buffer pool      </description>
     </item>
     
   </channel>

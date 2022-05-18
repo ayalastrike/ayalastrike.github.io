@@ -108,5 +108,18 @@ fil_system_t、fil_space_t、fil_node_t的关系如图所示：
  系统表空间 独立表空间 通用表空间 undo表空间 临时表空间  系统表空间 #  系统表空间位于datadir下，存放了InnoDB存储引擎的核心信息，包括数据字典、事务系统信息、double write buffer、change buffer。如果没有配置独立的undo表空间，则undo日志也存放在这里（临时表空间也是如此）。同样，如果没有开启独立表空间（file-per-table），则用户表的数据和索引也存放在这里。因此，系统表空间也被称为共享表空间。</description>
     </item>
     
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/8_buffer_pool/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/8_buffer_pool/</guid>
+      <description>基于磁盘的数据库系统通常都是用缓冲池（buffer pool）技术来弥补CPU和磁盘之间的速度鸿沟。
+通过以下机制来达成目标：
+spatial control 空间控制
+ where to write pages on disk. the goal is to keep pages that are used together often as physically close together as possible on disk.  temporal control 时间控制
+ when to read pages into memory, and when to write them to disk. the goal is minimize the number of stalls from having to read data from disk.  概述 #  buffer pool #  InnoDB是基于磁盘存储的存储引擎，磁盘中的记录以页为单位进行管理。</description>
+    </item>
+    
   </channel>
 </rss>
