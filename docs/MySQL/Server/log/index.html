@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="日志 #  MySQL server层日志有：
+ general log slow log error log  日志的存储方式（log_output）有：
+ 文件 表  所有日志的配置参数如下：
+log_output general log，slow log存放在何处（文件/表） log_timestamps general log, slow log, error log写入文件中的时间戳所用时区（UTC/SYSTEM），写入日志表中的不在此列。 general_log 是否开启general log sql_log_off 当前session是否关闭general log general_log_file general log文件名 slow_query_log 是否开启slow log slow_query_log_file slow log文件名 long_query_time slow query的判断时间（秒） log_queries_not_using_indexes 是否记录没有使用index的query log_throttle_queries_not_using_indexes log_queries_not_using_indexes配额（每分钟） log_slow_admin_statements 是否记录慢管理语句（ALTER TABLE, ANALYZE TABLE, CHECK TABLE, CREATE INDEX, DROP INDEX, OPTIMIZE TABLE, and REPAIR TABLE） log_error error log文件名 log_error_verbosity error, warning, and note messages log_warnings deprecated，用log_error_verbosity替代 log_syslog log_syslog_facility log_syslog_include_pid log_syslog_tag log-slow-slave-statements 记录从库上回放时的慢SQL（SBR/MIXED） mysqld startup options --log-isam[=file_name] 记录所有MyISAM的变化（debug） --log-raw 记录query rewrite plugin改写前的SQL 日志实现机制 #  general log和slow log #  实现 #  如下图所示：">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="日志 #  MySQL server层日志有：
+ general log slow log error log  日志的存储方式（log_output）有：
+ 文件 表  所有日志的配置参数如下：
+log_output general log，slow log存放在何处（文件/表） log_timestamps general log, slow log, error log写入文件中的时间戳所用时区（UTC/SYSTEM），写入日志表中的不在此列。 general_log 是否开启general log sql_log_off 当前session是否关闭general log general_log_file general log文件名 slow_query_log 是否开启slow log slow_query_log_file slow log文件名 long_query_time slow query的判断时间（秒） log_queries_not_using_indexes 是否记录没有使用index的query log_throttle_queries_not_using_indexes log_queries_not_using_indexes配额（每分钟） log_slow_admin_statements 是否记录慢管理语句（ALTER TABLE, ANALYZE TABLE, CHECK TABLE, CREATE INDEX, DROP INDEX, OPTIMIZE TABLE, and REPAIR TABLE） log_error error log文件名 log_error_verbosity error, warning, and note messages log_warnings deprecated，用log_error_verbosity替代 log_syslog log_syslog_facility log_syslog_include_pid log_syslog_tag log-slow-slave-statements 记录从库上回放时的慢SQL（SBR/MIXED） mysqld startup options --log-isam[=file_name] 记录所有MyISAM的变化（debug） --log-raw 记录query rewrite plugin改写前的SQL 日志实现机制 #  general log和slow log #  实现 #  如下图所示：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/log/" /><meta property="article:section" content="docs" />
+
+<meta property="article:modified_time" content="2022-05-18T22:25:02&#43;08:00" />
+
+<title>Log | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.7f2eadd6204c64ea45b0e3a5fdf46884d07de09606192c7e05f8d408939c4b00.js" integrity="sha256-fy6t1iBMZOpFsOOl/fRohNB94JYGGSx&#43;BfjUCJOcSwA=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning（转）</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化（转）</a></li>
+<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源（转）</a></li>
+<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol（转）</a></li>
+<li><a href="/docs/MySQL/Server/user_connection_handler/">用户建链（转）</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+<li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
+<li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
+<li><a href="/docs/MySQL/Server/memory/">内存管理</a></li>
+<li><a href="/docs/MySQL/Server/signal_handler/">信号处理机制</a></li>
+<li><a href="/docs/MySQL/Server/log/"class=active>日志</a></li>
+<li><a href="/docs/MySQL/Server/read_only/">read_only</a></li>
+<li><a href="/docs/MySQL/Server/lower_case_table_names/">lower_case_table_names</a></li>
+<li><a href="/docs/MySQL/Server/invisible_index/">Invisible Index</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_basic_structure_algo/">基本数据结构和算法</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_os/">os</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
+<li><a href="/docs/MySQL/InnoDB/7_storage/">storage</a></li>
+<li><a href="/docs/MySQL/InnoDB/8_buffer_pool/">buffer pool</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Replication/">Replication</a></li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>Log</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#日志">日志</a></li>
+    <li><a href="#日志实现机制">日志实现机制</a>
+      <ul>
+        <li><a href="#general-log和slow-log">general log和slow log</a>
+          <ul>
+            <li><a href="#实现">实现</a></li>
+            <li><a href="#logger生命周期">logger生命周期</a></li>
+            <li><a href="#日志格式">日志格式</a></li>
+            <li><a href="#slow-log细节">slow log细节</a></li>
+          </ul>
+        </li>
+        <li><a href="#error-log">error log</a>
+          <ul>
+            <li><a href="#实现-1">实现</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><h1 id="日志">
+  日志
+  <a class="anchor" href="#%e6%97%a5%e5%bf%97">#</a>
+</h1>
+<p>MySQL server层日志有：</p>
+<ul>
+<li>general log</li>
+<li>slow log</li>
+<li>error log</li>
+</ul>
+<p>日志的存储方式（log_output）有：</p>
+<ul>
+<li>文件</li>
+<li>表</li>
+</ul>
+<p>所有日志的配置参数如下：</p>
+<pre><code>log_output                              general log，slow log存放在何处（文件/表）
+log_timestamps                          general log, slow log, error log写入文件中的时间戳所用时区（UTC/SYSTEM），写入日志表中的不在此列。
+ 
+general_log                             是否开启general log
+sql_log_off                             当前session是否关闭general log
+general_log_file                        general log文件名
+ 
+slow_query_log                          是否开启slow log
+slow_query_log_file                     slow log文件名
+long_query_time                         slow query的判断时间（秒）
+log_queries_not_using_indexes           是否记录没有使用index的query
+log_throttle_queries_not_using_indexes  log_queries_not_using_indexes配额（每分钟）
+log_slow_admin_statements               是否记录慢管理语句（ALTER TABLE, ANALYZE TABLE, CHECK TABLE, CREATE INDEX, DROP INDEX, OPTIMIZE TABLE, and REPAIR TABLE）
+ 
+log_error                               error log文件名
+log_error_verbosity                     error, warning, and note messages
+log_warnings                            deprecated，用log_error_verbosity替代
+ 
+log_syslog
+log_syslog_facility
+log_syslog_include_pid
+log_syslog_tag
+ 
+log-slow-slave-statements               记录从库上回放时的慢SQL（SBR/MIXED）
+ 
+mysqld startup options
+--log-isam[=file_name]                  记录所有MyISAM的变化（debug）
+--log-raw                               记录query rewrite plugin改写前的SQL
+</code></pre><h1 id="日志实现机制">
+  日志实现机制
+  <a class="anchor" href="#%e6%97%a5%e5%bf%97%e5%ae%9e%e7%8e%b0%e6%9c%ba%e5%88%b6">#</a>
+</h1>
+<h2 id="general-log和slow-log">
+  general log和slow log
+  <a class="anchor" href="#general-log%e5%92%8cslow-log">#</a>
+</h2>
+<h3 id="实现">
+  实现
+  <a class="anchor" href="#%e5%ae%9e%e7%8e%b0">#</a>
+</h3>
+<p>如下图所示：</p>
+<p><img src="/MySQL_logger_implemenation.png" alt="MySQL_logger_implemenation" /></p>
+<h3 id="logger生命周期">
+  logger生命周期
+  <a class="anchor" href="#logger%e7%94%9f%e5%91%bd%e5%91%a8%e6%9c%9f">#</a>
+</h3>
+<pre><code>// mysqld启动
+query_logger.set_handlers(LOG_NONE | LOG_FILE | LOG_NONE);  // 设置log event handler list
+query_logger.init();                                        // new log event handler
+ 
+// 运行时
+query_logger.general_log_write                              // 写general log
+log_slow_statement                                          // 写slow log
+    log_slow_do                                             // 记录query rewrite plugin改写前的SQL
+        query_logger.slow_log_write
+ 
+// mysqld关闭
+query_logger.cleanup();
+</code></pre><h3 id="日志格式">
+  日志格式
+  <a class="anchor" href="#%e6%97%a5%e5%bf%97%e6%a0%bc%e5%bc%8f">#</a>
+</h3>
+<p>general log日志格式</p>
+<pre><code>thd-&gt;current_utime()    thd-&gt;thread_id()    enum_server_command     thd-&gt;query().str
+</code></pre><p>slow log日志格式</p>
+<pre><code># Time: thd-&gt;current_utime()
+# User@Host: sctx-&gt;priv_user().str [thd-&gt;security_context()-&gt;user()] @ thd-&gt;security_context()-&gt;host() [thd-&gt;security_context()-&gt;ip()]  Id:     thd-&gt;thread_id()
+# Query_time: current_utime - thd-&gt;start_utime  Lock_time: thd-&gt;utime_after_lock - thd-&gt;start_utime Rows_sent: thd-&gt;get_sent_row_count()  Rows_examined: thd-&gt;get_examined_row_count()
+use thd-&gt;db().str
+SET timestamp=thd-&gt;current_utime()
+thd-&gt;query().str
+</code></pre><blockquote class="book-hint info">
+  thd-&gt;utime_after_lock由thd_storage_lock_wait设置
+</blockquote>
+
+<p>示例</p>
+<pre><code>general log
+2021-05-27T10:16:16.864244+08:00          154 Query     select now()
+ 
+slow log
+# Time: 2021-03-23T10:41:29.249524+08:00
+# User@Host: root[root] @ localhost []  Id:    34
+# Query_time: 11.409186  Lock_time: 0.000117 Rows_sent: 11  Rows_examined: 7499929
+use device_manager;
+SET timestamp=1616467289;
+select distinct cmd_param_key from  device_task_info;
+</code></pre><h3 id="slow-log细节">
+  slow log细节
+  <a class="anchor" href="#slow-log%e7%bb%86%e8%8a%82">#</a>
+</h3>
+<p>slow_log 是在语句执行完后记录的，因为加锁时间和返回记录数这些信息，在执行之后才知道，general_log 记录是在语句解析完执行前。</p>
+<p>判断query是否记入slow_log的函数为log_slow_applicable()：</p>
+<ol>
+<li>warn_no_index：没有用到索引，并且log_queries_not_using_indexes打开（这种情况下还可能触发 throttle 导致不记录）</li>
+<li>log_this_query：被标记为慢SQL：(thd-&gt;server_status &amp; SERVER_QUERY_WAS_SLOW) 或者 warn_no_index 或者扫描行数大于min_examined_row_limit</li>
+</ol>
+<p><strong>log_slow_applicable()</strong></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#ee82ee">bool</span> warn_no_index= ((thd-&gt;server_status &amp;
+                      (SERVER_QUERY_NO_INDEX_USED |
+                       SERVER_QUERY_NO_GOOD_INDEX_USED)) &amp;&amp;
+                     opt_log_queries_not_using_indexes &amp;&amp;
+                     !(sql_command_flags[thd-&gt;lex-&gt;sql_command] &amp;
+                       CF_STATUS_COMMAND));
+<span style="color:#ee82ee">bool</span> log_this_query=  ((thd-&gt;server_status &amp; SERVER_QUERY_WAS_SLOW) ||
+                       warn_no_index) &amp;&amp;
+                      (thd-&gt;get_examined_row_count() &gt;=
+                       thd-&gt;variables.min_examined_row_limit);
+</code></pre></div><p>在SQL执行结束时，会先调用thd-&gt;update_server_status()判断是否是慢SQL，如果判断为真则将server_status |= SERVER_QUERY_WAS_SLOW，逻辑如下：</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#0f0">/**
+</span><span style="color:#0f0"> Update server status after execution of a top level statement.
+</span><span style="color:#0f0"> 
+</span><span style="color:#0f0"> Currently only checks if a query was slow, and assigns
+</span><span style="color:#0f0"> the status accordingly.
+</span><span style="color:#0f0"> Evaluate the current time, and if it exceeds the long-query-time
+</span><span style="color:#0f0"> setting, mark the query as slow.
+</span><span style="color:#0f0">*/</span>
+<span style="color:#ee82ee">void</span> <span style="color:#ff0">update_server_status</span>()
+{
+  ulonglong end_utime_of_query= current_utime();
+  <span style="color:#f00">if</span> (end_utime_of_query &gt; utime_after_lock + variables.long_query_time)
+    server_status|= SERVER_QUERY_WAS_SLOW;
+}
+</code></pre></div><p>utime_after_lock表示的是拿到锁的时间点，server层通过THD::set_time_after_lock()设置，引擎层（InnoDB）如果发生锁等待，会通过thd_storage_lock_wait()累加。因此一个SQL如果一直处于等待中而没有执行完，是不会记入慢SQL的。</p>
+<p>query_time和lock_time的计算逻辑如下：</p>
+<pre><code>Query_logger::slow_log_write
+ 
+ if (thd-&gt;start_utime)
+ {
+   query_utime= (current_utime - thd-&gt;start_utime);
+   lock_utime=  (thd-&gt;utime_after_lock - thd-&gt;start_utime);
+ }
+</code></pre><p>同理，rows_sent通过THD::inc_sent_row_count()一直累加。而rows_examined会在累加后由JOIN::exec()重置。</p>
+<pre><code>JOIN::exec() {
+ ``...
+ ``/*
+  ``Initialize examined rows here because the values from all join parts
+  ``must be accumulated in examined_row_count. Hence every join
+  ``iteration must count from zero.
+ ``*/
+ ``examined_rows= 0;
+ ``...
+}
+</code></pre><p>我们go through了一遍，从上面我们可以得知，参与判断为慢SQL的变量有：</p>
+<ul>
+<li>thd-&gt;server_status
+<ul>
+<li>thd-&gt;utime_after_lock - thd-&gt;start_utime</li>
+</ul>
+</li>
+<li>SQL类型为CF_STATUS_COMMAND</li>
+<li>m_examined_row_count</li>
+</ul>
+<p>在用户SQL的执行中，会在每个SQL语句执行前，把server_status, start_utime, m_sent_rows_count重置，调用链如下：</p>
+<pre><code>mysql_parse()
+    THD::reset_for_next_command()
+</code></pre><h2 id="error-log">
+  error log
+  <a class="anchor" href="#error-log">#</a>
+</h2>
+<h3 id="实现-1">
+  实现
+  <a class="anchor" href="#%e5%ae%9e%e7%8e%b0-1">#</a>
+</h3>
+<pre><code>// mysqld使用
+sql_print_error
+sql_print_warning
+sql_print_information
+{
+  va_list args;
+  DBUG_ENTER(&quot;sql_print_warning&quot;);
+ 
+  va_start(args, format);
+  error_log_print(INFORMATION_LEVEL, format, args);
+  va_end(args);
+ 
+  DBUG_VOID_RETURN;
+}
+ 
+// plugin使用
+my_plugin_log_message
+{
+  va_start(args, format);
+  my_snprintf(format2, sizeof (format2) - 1, &quot;Plugin %.*s reported: '%s'&quot;,
+              (int) plugin-&gt;name.length, plugin-&gt;name.str, format);
+  error_log_print(lvl, format2, args);
+  va_end(args);
+}
+</code></pre><p>二者都是调用error_log_print，然后通过buffer IO将错误信息写入文件或者syslog。</p>
+<blockquote class="book-hint info">
+  从上面可以看出，mysql的所有日志都是buffer IO，其中general log，slow log通过IO_CACHE缓冲，error log通过std::ostringstream缓冲，然后在某些时刻调用flush_error_log_messages()进行flush。
+</blockquote>
+
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#日志">日志</a></li>
+    <li><a href="#日志实现机制">日志实现机制</a>
+      <ul>
+        <li><a href="#general-log和slow-log">general log和slow log</a>
+          <ul>
+            <li><a href="#实现">实现</a></li>
+            <li><a href="#logger生命周期">logger生命周期</a></li>
+            <li><a href="#日志格式">日志格式</a></li>
+            <li><a href="#slow-log细节">slow log细节</a></li>
+          </ul>
+        </li>
+        <li><a href="#error-log">error log</a>
+          <ul>
+            <li><a href="#实现-1">实现</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

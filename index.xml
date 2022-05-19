@@ -214,6 +214,31 @@ MySQL 8.0.0 Release Notes
     
     <item>
       <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/log/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/log/</guid>
+      <description>日志 #  MySQL server层日志有：
+ general log slow log error log  日志的存储方式（log_output）有：
+ 文件 表  所有日志的配置参数如下：
+log_output general log，slow log存放在何处（文件/表） log_timestamps general log, slow log, error log写入文件中的时间戳所用时区（UTC/SYSTEM），写入日志表中的不在此列。 general_log 是否开启general log sql_log_off 当前session是否关闭general log general_log_file general log文件名 slow_query_log 是否开启slow log slow_query_log_file slow log文件名 long_query_time slow query的判断时间（秒） log_queries_not_using_indexes 是否记录没有使用index的query log_throttle_queries_not_using_indexes log_queries_not_using_indexes配额（每分钟） log_slow_admin_statements 是否记录慢管理语句（ALTER TABLE, ANALYZE TABLE, CHECK TABLE, CREATE INDEX, DROP INDEX, OPTIMIZE TABLE, and REPAIR TABLE） log_error error log文件名 log_error_verbosity error, warning, and note messages log_warnings deprecated，用log_error_verbosity替代 log_syslog log_syslog_facility log_syslog_include_pid log_syslog_tag log-slow-slave-statements 记录从库上回放时的慢SQL（SBR/MIXED） mysqld startup options --log-isam[=file_name] 记录所有MyISAM的变化（debug） --log-raw 记录query rewrite plugin改写前的SQL 日志实现机制 #  general log和slow log #  实现 #  如下图所示：</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/lower_case_table_names/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/lower_case_table_names/</guid>
+      <description>在MySQL中，表是和操作系统中的文件对应的，而文件名在有的操作系统下是区分大小写的（比如linux），有的是不区分大小写（比如Windows），表名与文件名的大小写对应关系，MySQL 是通过lower_case_table_names这个变量来控制的。
+这个变量的有效取值是0，1，2，按照官方文档 的解释：
+ 0：表在文件系统存储的时候，对应的文件名是按建表时指定的大小写存的，MySQL 内部对表名的比较也是区分大小写的 1：表在文件系统存储的时候，对应的文件名都小写的，MySQL 内部对表名的比较是转成小写的，即不区分大小写 2：表在文件系统存储的时候，对应的文件名是按建表时指定的大小写存的，但是 MySQL 内部对表名的比较是转成小写的，即不区分大小写  0适用于区分大小写的系统，1都适用，2适用于不区分大小写的系统。
+如果在开始使用MySQL选定了一个合适的值后，就不要改变，不然的话在之后使用中就会出现问题。
+MGR用因为要根据db+table+pk生成write_set，还有一个bug fix。</description>
+    </item>
+    
+    <item>
+      <title></title>
       <link>https://ayalastrike.github.io/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
@@ -305,6 +330,16 @@ OK Packet #  do_command dispatch_command THD::send_statement_status // 根据这
     
     <item>
       <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/read_only/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/read_only/</guid>
+      <description>MySQL通过5个步骤来设置read_only：
+ 获取global read lock，阻塞所有的写入请求 flush opened table cache，阻塞所有的显式读写锁 获取commit lock，阻塞commit写入binlog 设置read_only=1 释放global read lock和commit lock  设置read_only阻塞用户写入，但只能阻塞普通用户的更新，MySQL为了最大可能的保护数据一致性，增强了read_only功能，通过设置super read only，阻塞除了slave线程以外以为的所有用户的写入，包括super用户。</description>
+    </item>
+    
+    <item>
+      <title></title>
       <link>https://ayalastrike.github.io/docs/MySQL/Server/returning/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
@@ -314,6 +349,24 @@ OK Packet #  do_command dispatch_command THD::send_statement_status // 根据这
 AliSQL 为了减少对 MySQL 语法兼容性的侵入，并支持 returning 功能， 采用了 native procedure 的方式，使用DBMS_TRANS package，统一使用 returning procedure 来支持 DML 语句返回 Resultset。
 语法 #  DBMS_TRANS.returning(Field_list=&amp;gt;, Statement=&amp;gt;); 其中:
  Field list : 代表期望的返回字段，以 “,” 进行分割，支持 * 号表达； Statement ：表示要执行的DML 语句， 支持 INSERT / UPDATE / DELETE；  INSERT Returning #  针对 insert 语句， returning proc 返回插入到表中的记录内容；</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/signal_handler/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/signal_handler/</guid>
+      <description>引出问题 #  在之前MySQL发版测试后，QA发现一个问题，用mysql.server stop脚本无法使mysqld进程退出，只会无限等待。
+通过查看mysql.server脚本，发现使用stop选项时执行了如下操作：
+ 检查mysql/var/mysql.pid文件是否存在，若不存在说明mysqld进程未启动；若存在，读出文件中记录的mysqld进程号pid； 发送kill -0 pid，检查是否真的存在进程号为pid的进程。若进程不存在则无需stop，直接删除mysql/var/mysql.pid文件； 若pid进程存在，发送kill pid（即kill -15 pid），随后循环等待直到mysql/var/mysql.pid文件被删除（意味着mysqld已经退出）。  由此逻辑可知，mysql.server stop脚本无限等待大概率是因为第3步发送kill pid后，mysqld并未走退出流程，mysql/var/mysql.pid迟迟不被删所致。通过观察mysql/log/mysql.err文件中的日志，发现执行mysql.server stop后只有这么一条记录：
+Got signal 15 from thread 0Got signal 15 from thread 0 说明mysqld进程确实有收到SIGTERM信号，但是并未发起shutdown流程，因此需要了解Linux信号处理机制及MySQL中信号处理逻辑才好判断是哪里出了问题。
+Linux信号处理机制 #  在Linux系统中，我们可以通过kill -信号名 进程ID的方式向指定进程发送各种信号。比如常用的kill pid其实等价于kill -15 pid，会向pid进程发送SIGTERM信号；在一个shell前台程序运行中按Ctrl+C，等价于kill -2 pid，会向pid进程发送SIGINT信号；而kill -9 pid则会向pid进程发送SIGKILL信号。
+当进程收到信号时如何处理？通常有几种处理方式：
+ 默认：如果不自定义处理函数，则每个信号都有默认的处理方式。很多信号的默认处理方式都是进程中断+直接退出，极其暴力，这是我们不希望的，因此经常针对某些信号设置自定义处理函数； 捕获：利用signal函数或sigaction函数可以注册用户自定义的信号处理函数（进程级生效）。比如在程序中使用signal(SIGINT, handle_shutdown)，可以注册进程收到SIGINT信号时调用用户自定义函数handle_shutdown，然后用户就可以在此函数中实现一些优雅退出的代码，比如保存工作进度、打印日志等等，不至于退出得过于暴力。需要注意的是，并不是所有信号都允许被捕获并进入自定义处理函数，比如SIGKILL（kill -9）就不允许； 忽略：将某信号的回调函数设置为SIG_IGN(ignore)。进程收到此信号后直接丢弃，不作任何处理。一般涉及网络通信的服务端程序至少都会忽略坑爹信号SIGPIPE（当试图向对方发送数据时发现对方已断连就会触发，默认处理方式是进程退出，极其坑爹……）。需要注意的是，并不是所有信号都允许被忽略，比如SIGKILL（kill -9）就不允许； 屏蔽：通过pthread_sigmask函数可以针对某一线程设置一个信号屏蔽集合，比如选择屏蔽SIGTERM，那么该线程在收到此信号是只是将信号丢入一个pending队列，并不做处理。在此要强调，屏蔽和忽略是有区别的，忽略是直接将信号丢弃，而屏蔽是可以通过pthread_sigmask函数解除的，当解除以后pending队列里的信号就会再次弹出。每个线程可以设置不同的屏蔽规则，但是线程创建时默认继承父线程的屏蔽规则。  在多线程程序中，向进程发送的信号除硬件故障导致的信号外，是可能被随机转发到任何一个线程的。不仅如此，连续发送多个信号，可能在多个子线程中被并发触发，这使得信号处理逻辑变得异常复杂。试想一下，假如我们在进程中对SIGTERM信号注册了优雅退出的处理函数，当用户对进程执行了kill命令，你的线程1捕获到SIGTERM正在优雅退出时，用户等得不耐烦又发了一遍kill命令，此时线程2就有可能捕获到SIGTERM，和线程1并发进行退出，这可能会导致各种非预期行为发生。
+因此，**大部分多线程程序常用的信号处理模式是使用单独的信号处理线程，将可能在多个线程中并发出现的信号，转化为只在信号处理线程中排队依次出现，同步处理。**具体实现方式为：对于程序中绝大多数不关注信号的线程，都通过设置信号屏蔽规则在整个线程生命周期中将某些信号屏蔽；建立一个单独的信号处理线程，用一个无限循环调用sigwait函数等待所有关注的信号，阻塞式等待在别的线程“碰壁”后被加入pending队列的信号，每次取出一个信号，进行对应处理，再调用sigwait取下一个信号。这样就将多线程异步信号转为了单线程同步处理，使编写多线程程序的信号处理逻辑变得非常简单。当采用单独的信号处理线程后，不管哪个线程收到SIGTERM，都会在信号处理线程的sigwait函数中返回，这样同时就只可能由信号处理线程执行优雅退出，此时就算向进程发送别的信号，只要信号处理线程不将前一个信号处理完后再次调用sigwait，都是感知不到的。在下文中我们看到，MySQL正是使用了这种单独信号处理线程的模式。
+MySQL信号处理逻辑 #  在sql/mysqld.cc的主入口函数mysqld_main中靠前的位置，我们可以找到设置MySQL信号处理规则的函数my_init_signals：
+// sql/mysqld.cc mysqld_main() if (init_common_variables()) unireg_abort(MYSQLD_ABORT_EXIT); // Will do exit  my_init_signals(); 在my_init_signals函数中首先设置了进程级的信号处理规则：</description>
     </item>
     
     <item>
@@ -374,6 +427,17 @@ mysql&amp;gt; show global variables like &#39;%timeout%&#39;; +-----------------
     
     <item>
       <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/user_connection_handler/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/user_connection_handler/</guid>
+      <description>（转载自阿里内核月报）
+建立连接过程 #  MySQL建立连接过程如下
+// 初始化网络 network_init() set_ports(); // 设置port  Mysqld_socket_listener *mysqld_socket_listener= new (std::nothrow) Mysqld_socket_listener(bind_addr_str, mysqld_port, back_log, mysqld_port_timeout, unix_sock_name); Connection_acceptor&amp;lt;Mysqld_socket_listener&amp;gt; *mysqld_socket_acceptor= new (std::nothrow) Connection_acceptor&amp;lt;Mysqld_socket_listener&amp;gt;(mysqld_socket_listener); mysqld_socket_acceptor-&amp;gt;init_connection_acceptor(); ... // 监听socket事件 mysqld_socket_acceptor-&amp;gt;connection_event_loop() { Connection_handler_manager *mgr= Connection_handler_manager::get_instance(); while (!abort_loop) { Channel_info *channel_info= m_listener-&amp;gt;listen_for_connection_event(); if (channel_info != NULL) mgr-&amp;gt;process_new_connection(channel_info); } } Channel_info* Mysqld_socket_listener::listen_for_connection_event() { int retval= poll(&amp;amp;m_poll_info.m_fds[0], m_socket_map.size(), -1); // POLL  for (uint i= 0; i &amp;lt; m_socket_map.size(); ++i) { if (m_poll_info.m_fds[i].revents &amp;amp; POLLIN) { listen_sock= m_poll_info.</description>
+    </item>
+    
+    <item>
+      <title></title>
       <link>https://ayalastrike.github.io/docs/MySQL/Server/vio/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
@@ -392,7 +456,7 @@ The VIO routines are wrappers for the various network I/O calls that happen with
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/menu/</guid>
-      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning（转）   NET VIO MySQL 8.0 对网络模块的优化（转） MySQL 8.0 通过Resource Group来控制线程计算资源（转） MariaDB MaxScale Proxy Protocol（转）   Timeout机制 Thread Pool MDL IO_CACHE Server层的内存管理 Invisible Index   InnoDB  概览 源码结构 基本数据结构和算法 os record page storage buffer pool      </description>
+      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning（转）   NET VIO MySQL 8.0 对网络模块的优化（转） MySQL 8.0 通过Resource Group来控制线程计算资源（转） MariaDB MaxScale Proxy Protocol（转） 用户建链（转）   Timeout机制 Thread Pool MDL IO_CACHE 内存管理 信号处理机制 日志 read_only lower_case_table_names Invisible Index   InnoDB  概览 源码结构 基本数据结构和算法 os record page storage buffer pool   Replication    </description>
     </item>
     
   </channel>

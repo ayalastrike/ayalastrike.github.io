@@ -3,20 +3,29 @@
 <head>
   <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="">
+<meta name="description" content="在MySQL中，表是和操作系统中的文件对应的，而文件名在有的操作系统下是区分大小写的（比如linux），有的是不区分大小写（比如Windows），表名与文件名的大小写对应关系，MySQL 是通过lower_case_table_names这个变量来控制的。
+这个变量的有效取值是0，1，2，按照官方文档 的解释：
+ 0：表在文件系统存储的时候，对应的文件名是按建表时指定的大小写存的，MySQL 内部对表名的比较也是区分大小写的 1：表在文件系统存储的时候，对应的文件名都小写的，MySQL 内部对表名的比较是转成小写的，即不区分大小写 2：表在文件系统存储的时候，对应的文件名是按建表时指定的大小写存的，但是 MySQL 内部对表名的比较是转成小写的，即不区分大小写  0适用于区分大小写的系统，1都适用，2适用于不区分大小写的系统。
+如果在开始使用MySQL选定了一个合适的值后，就不要改变，不然的话在之后使用中就会出现问题。
+MGR用因为要根据db&#43;table&#43;pk生成write_set，还有一个bug fix。">
 <meta name="theme-color" content="#FFFFFF">
-<meta name="color-scheme" content="light dark"><meta property="og:title" content="Tags" />
-<meta property="og:description" content="" />
-<meta property="og:type" content="website" />
-<meta property="og:url" content="https://ayalastrike.github.io/tags/" />
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="在MySQL中，表是和操作系统中的文件对应的，而文件名在有的操作系统下是区分大小写的（比如linux），有的是不区分大小写（比如Windows），表名与文件名的大小写对应关系，MySQL 是通过lower_case_table_names这个变量来控制的。
+这个变量的有效取值是0，1，2，按照官方文档 的解释：
+ 0：表在文件系统存储的时候，对应的文件名是按建表时指定的大小写存的，MySQL 内部对表名的比较也是区分大小写的 1：表在文件系统存储的时候，对应的文件名都小写的，MySQL 内部对表名的比较是转成小写的，即不区分大小写 2：表在文件系统存储的时候，对应的文件名是按建表时指定的大小写存的，但是 MySQL 内部对表名的比较是转成小写的，即不区分大小写  0适用于区分大小写的系统，1都适用，2适用于不区分大小写的系统。
+如果在开始使用MySQL选定了一个合适的值后，就不要改变，不然的话在之后使用中就会出现问题。
+MGR用因为要根据db&#43;table&#43;pk生成write_set，还有一个bug fix。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/lower_case_table_names/" /><meta property="article:section" content="docs" />
 
-<title>Tags | Rick&#39;s Blog</title>
+<meta property="article:modified_time" content="2022-05-18T22:25:02&#43;08:00" />
+
+<title>Lower Case Table Names | Rick&#39;s Blog</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
   <script defer src="/en.search.min.7f2eadd6204c64ea45b0e3a5fdf46884d07de09606192c7e05f8d408939c4b00.js" integrity="sha256-fy6t1iBMZOpFsOOl/fRohNB94JYGGSx&#43;BfjUCJOcSwA=" crossorigin="anonymous"></script>
-<link rel="alternate" type="application/rss+xml" href="https://ayalastrike.github.io/tags/index.xml" title="Rick's Blog" />
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -84,7 +93,7 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/Server/signal_handler/">信号处理机制</a></li>
 <li><a href="/docs/MySQL/Server/log/">日志</a></li>
 <li><a href="/docs/MySQL/Server/read_only/">read_only</a></li>
-<li><a href="/docs/MySQL/Server/lower_case_table_names/">lower_case_table_names</a></li>
+<li><a href="/docs/MySQL/Server/lower_case_table_names/"class=active>lower_case_table_names</a></li>
 <li><a href="/docs/MySQL/Server/invisible_index/">Invisible Index</a></li>
 </ul>
 </li>
@@ -146,7 +155,7 @@ https://github.com/alex-shpak/hugo-book
     <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
   </label>
 
-  <strong>Tags</strong>
+  <strong>Lower Case Table Names</strong>
 
   <label for="toc-control">
     
@@ -159,29 +168,9 @@ https://github.com/alex-shpak/hugo-book
   
   <aside class="hidden clearfix">
     
-  <nav>
-  <ul>
   
-    
-    <li class="book-section-flat">
-      <strong>Categories</strong>
-      <ul>
-      
-      </ul>
-    </li>
-    
-  
-    
-    <li class="book-section-flat">
-      <strong>Tags</strong>
-      <ul>
-      
-      </ul>
-    </li>
-    
-  
-  </ul>
-</nav>
+<nav id="TableOfContents"></nav>
+
 
 
   </aside>
@@ -191,11 +180,17 @@ https://github.com/alex-shpak/hugo-book
 
       
       
-  
-
-  
-
-
+  <article class="markdown"><p>在MySQL中，表是和操作系统中的文件对应的，而文件名在有的操作系统下是区分大小写的（比如linux），有的是不区分大小写（比如Windows），表名与文件名的大小写对应关系，MySQL 是通过<a href="https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_lower_case_table_names">lower_case_table_names</a>这个变量来控制的。</p>
+<p>这个变量的有效取值是0，1，2，按照官方文档 的解释：</p>
+<ul>
+<li>0：表在文件系统存储的时候，对应的文件名是按建表时指定的大小写存的，MySQL 内部对表名的比较也是区分大小写的</li>
+<li>1：表在文件系统存储的时候，对应的文件名都小写的，MySQL 内部对表名的比较是转成小写的，即不区分大小写</li>
+<li>2：表在文件系统存储的时候，对应的文件名是按建表时指定的大小写存的，但是 MySQL 内部对表名的比较是转成小写的，即不区分大小写</li>
+</ul>
+<p>0适用于区分大小写的系统，1都适用，2适用于不区分大小写的系统。</p>
+<p>如果在开始使用MySQL选定了一个合适的值后，就不要改变，不然的话在之后使用中就会出现问题。</p>
+<p>MGR用因为要根据db+table+pk生成write_set，还有一个bug fix。</p>
+</article>
  
       
 
@@ -220,6 +215,10 @@ https://github.com/alex-shpak/hugo-book
 
       
   
+  <div class="book-comments">
+
+</div>
+  
  
 
       <label for="menu-control" class="hidden book-menu-overlay"></label>
@@ -229,29 +228,9 @@ https://github.com/alex-shpak/hugo-book
     <aside class="book-toc">
       <div class="book-toc-content">
         
-  <nav>
-  <ul>
   
-    
-    <li class="book-section-flat">
-      <strong>Categories</strong>
-      <ul>
-      
-      </ul>
-    </li>
-    
-  
-    
-    <li class="book-section-flat">
-      <strong>Tags</strong>
-      <ul>
-      
-      </ul>
-    </li>
-    
-  
-  </ul>
-</nav>
+<nav id="TableOfContents"></nav>
+
 
  
       </div>
