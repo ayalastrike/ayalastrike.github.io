@@ -127,7 +127,8 @@ fil_system_t、fil_space_t、fil_node_t的关系如图所示：
 通过以下机制来达成目标：
 spatial control 空间控制
  where to write pages on disk. the goal is to keep pages that are used together often as physically close together as possible on disk.  temporal control 时间控制
- when to read pages into memory, and when to write them to disk. the goal is minimize the number of stalls from having to read data from disk.  概述 #  buffer pool #  InnoDB是基于磁盘存储的存储引擎，磁盘中的记录以页为单位进行管理。</description>
+ when to read pages into memory, and when to write them to disk. the goal is minimize the number of stalls from having to read data from disk.  在以下章节中，InnoDB数据结构中的buf_block_t，buf_page_t、frame按照Jim Gray的命名进行转换，称为block（以下称为PCB，包含meta+data）、meta和frame（data）。
+概述 #  buffer pool #  InnoDB是基于磁盘存储的存储引擎，磁盘中的记录以页为单位进行管理。</description>
     </item>
     
     <item>
