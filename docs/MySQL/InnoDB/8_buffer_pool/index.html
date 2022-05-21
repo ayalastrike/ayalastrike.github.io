@@ -20,14 +20,14 @@ spatial control 空间控制
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/InnoDB/8_buffer_pool/" /><meta property="article:section" content="docs" />
 
-<meta property="article:modified_time" content="2022-05-19T18:59:51&#43;08:00" />
+<meta property="article:modified_time" content="2022-05-21T12:31:06&#43;08:00" />
 
 <title>8 Buffer Pool | Rick&#39;s Blog</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.c86ffc37befe8851164342511fbd58888a92ba50f117b51e2bfa7872a88e5db5.js" integrity="sha256-yG/8N77&#43;iFEWQ0JRH71YiIqSulDxF7UeK/p4cqiOXbU=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.d3762ec625f7f557e2b835bcad6b3baf5ae8944623ce0f001ce732aa9b9f85ab.js" integrity="sha256-03YuxiX39VfiuDW8rWs7r1rolEYjzg8AHOcyqpufhas=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -109,6 +109,7 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/InnoDB/6_page/">page</a></li>
 <li><a href="/docs/MySQL/InnoDB/7_storage/">storage</a></li>
 <li><a href="/docs/MySQL/InnoDB/8_buffer_pool/"class=active>buffer pool</a></li>
+<li><a href="/docs/MySQL/InnoDB/9_b_tree/">B+ tree</a></li>
 </ul>
 </li>
 <li><a href="/docs/MySQL/Replication/">Replication</a></li>
@@ -223,11 +224,8 @@ https://github.com/alex-shpak/hugo-book
     </li>
     <li><a href="#页的更新">页的更新</a>
       <ul>
-        <li><a href="#页的更新流程">页的更新流程</a>
-          <ul>
-            <li><a href="#加入flush-list">加入flush list</a></li>
-          </ul>
-        </li>
+        <li><a href="#页的更新流程">页的更新流程</a></li>
+        <li><a href="#加入flush-list">加入flush list</a></li>
       </ul>
     </li>
     <li><a href="#页的刷回">页的刷回</a>
@@ -240,6 +238,7 @@ https://github.com/alex-shpak/hugo-book
         </li>
       </ul>
     </li>
+    <li><a href="#mysql-80改进">MySQL 8.0改进</a></li>
   </ul>
 </nav>
 
@@ -308,7 +307,7 @@ https://github.com/alex-shpak/hugo-book
   <a class="anchor" href="#page-table">#</a>
 </h2>
 <p>buffer pool通过page table（也称为page hashtable，其Key是space_id, page_no，value是PCB地址）可以快速找到已经被读入内存的数据页，而不用线性遍历LRU List去查找。这里的page table不是AHI，AHI是为了减少B+树的扫描，而page hash是为了避免扫描链表（LRU List）。</p>
-<p>AHI在B+tree一章详细介绍。</p>
+<p>AHI在B+ tree一章详细介绍。</p>
 <h2 id="buffer-chunk">
   buffer chunk
   <a class="anchor" href="#buffer-chunk">#</a>
@@ -628,7 +627,7 @@ if (bpage-&gt;oldest_modification == 0
 <li>buffer pool重新分配所有的chunks</li>
 <li>如果扩大/收缩超过2倍，重置page hash，改变hash桶大小</li>
 <li>解锁</li>
-<li>果扩大/收缩超过2倍，重启和buffer pool大小相关的内存结构，如锁系统（lock_sys_resize），AHI（btr_search_sys_resize），数据字典（dict_resize）</li>
+<li>如果扩大/收缩超过2倍，重启和buffer pool大小相关的内存结构，如锁系统（lock_sys_resize），AHI（btr_search_sys_resize），数据字典（dict_resize）</li>
 </ol>
 </li>
 <li>开启AHI</li>
@@ -680,7 +679,7 @@ if (bpage-&gt;oldest_modification == 0
 <li>PCB和evict clock的差值：频繁（access_clock）而置换概率低的（evict clock），越应该在LRU的上部</li>
 </ul>
 <p>整体上如图所示：</p>
-<p>这样的设计也不是没有问题，维护clock的开销和访问成正比，这会是一个hotspot。</p>
+<p>这样的设计有个问题，维护clock的开销和访问成正比，这会是一个hotspot。</p>
 <h2 id="维护策略">
   维护策略
   <a class="anchor" href="#%e7%bb%b4%e6%8a%a4%e7%ad%96%e7%95%a5">#</a>
@@ -703,7 +702,7 @@ if (bpage-&gt;oldest_modification == 0
 <blockquote class="book-hint danger">
   <p>留给读者2个小问题：</p>
 <ol>
-<li>官方图中的OLD区头部是静态的吗？</li>
+<li>官方图中的OLD区指针（LRU_old）是静态的吗？什么时候会进行调整？</li>
 <li>如何计算评估evict和keep in memory的策略？</li>
 </ol>
 
@@ -751,41 +750,57 @@ if (bpage-&gt;oldest_modification == 0
   留给读者1个小问题：page-latch何时释放
 </blockquote>
 
-<p>另外，再次重生PCB.meta中的buf_fix_count和io_fix两个变量，这两个变量主要用来做并发控制，减少mutex锁定的范围。当从buffer pool读取数据页时，会其加读锁，然后递增buf_page_t::buf_fix_count，同时设置buf_page_t::io_fix为BUF_IO_READ，然后即可以释放读锁。后续如果其他线程在驱逐数据页(或者刷脏)的时候，需要先检查一下这两个变量，如果buf_page_t::buf_fix_count不为零且buf_page_t::io_fix不为BUF_IO_NONE，则不允许驱逐(buf_page_can_relocate)。这里的技巧主要是为了减少PCB上mutex的争抢，而对数据页的内容（frame），读取的时候依然要加读锁，修改时加写锁。</p>
+<p>另外，再次重申一下PCB.meta中的buf_fix_count和io_fix两个变量，这两个变量主要用来做并发控制，减少mutex锁定的范围。当从buffer pool读取数据页时，会其加读锁，然后递增buf_page_t::buf_fix_count，同时设置buf_page_t::io_fix为BUF_IO_READ，然后即可以释放读锁。后续如果其他线程在驱逐数据页(或者刷脏)的时候，需要先检查一下这两个变量，如果buf_page_t::buf_fix_count不为零且buf_page_t::io_fix不为BUF_IO_NONE，则不允许驱逐(buf_page_can_relocate)。这里的技巧主要是为了减少PCB上mutex的争抢，而对数据页的内容（frame），读取的时候依然要加读锁，修改时加写锁。</p>
 <p>读取页面的函数调用链如下：</p>
 <pre><code>buf_page_get_gen
-	buf_page_hash_get_low				// 从page hash中查找（缓冲池）
-	miss: block= null
-		buf_read_page					// 物理读取
-			buf_read_page_low			
-				buf_page_init_for_read	// 从缓冲池中通过LRU算法分配对象buf_block_t，加block-&gt;mutex，并加x-latch（block-&gt;lock）,用以保护其指向的内存（block-&gt;frame，即页的实际存储的内容）
-				fil_io					// 读取磁盘上的数据页
-				buf_page_io_complete	// 同步/异步IO完成，释放x-latch
-					buf_page_set_io_fix	// 释放io_fix
-			buf_read_ahead_random		// 随机预读
-		failed retry 100...				// 物理读取失败则重试100次
-	hit: fix_block= block
-	buf_block_fix						// FIX page
-	update buf_page-&gt;access_time		// 更新page ts
-	buf_read_ahead_linear				// 线性读取
-	buf_page_make_young_if_needed		// 更新LRU
+  buf_page_hash_get_low        // 从page hash中查找（缓冲池）
+  miss: block= null
+    buf_read_page              // 物理读取
+      buf_read_page_low			
+        buf_page_init_for_read // 从缓冲池中通过LRU算法分配对象buf_block_t，加block-&gt;mutex，并加x-latch（block-&gt;lock）,用以保护其指向的内存（block-&gt;frame，即页的实际存储的内容）
+        fil_io                 // 读取磁盘上的数据页
+        buf_page_io_complete   // 同步/异步IO完成，释放x-latch
+          buf_page_set_io_fix  // 释放io_fix
+      buf_read_ahead_random    // 随机预读
+    failed retry 100...        // 物理读取失败则重试100次
+  hit: fix_block= block
+  buf_block_fix                // FIX page
+  update buf_page-&gt;access_time // 更新page ts
+  buf_read_ahead_linear        // 线性读取
+  buf_page_make_young_if_needed// 更新LRU
 </code></pre><p>以下是buf_page_get_gen的详细流程：</p>
 <ol>
-<li>通过page_id（space_id+page_no）查找数据页位于哪个buffer pool instance中，instance_no = (space_id &laquo; 20 + space_id + page_no &raquo; 6) % instance_number，即通过space_id+page_no算出一个fold值然后按照instance取余。这里有个小细节，page_no的第六位被砍掉，这是为了保证一个extent的数据（2的6次方=64）能被缓存到同一个buffer pool instance中，便于后面的预读操作。</li>
-<li>在page table中查找page，返回PCB（buf_page_hash_get_low）</li>
-<li>如果没有在buffer pool中，并且mode为BUF_GET_IF_IN_POOL_OR_WATCH则设置watch数据页（buf_pool_watch_set）</li>
-<li>如果没有在buffer pool中，并且mode为BUF_GET_IF_IN_POOL | BUF_PEEK_IF_IN_POOL | BUF_GET_IF_IN_POOL_OR_WATCH，则返回null，表示没有找到数据页。</li>
-<li>如果没有在buffer pool中，并且mode为其他，发起磁盘同步读取（buf_read_page）(buf_read_page)。
+<li>
+<p>通过page_id（space_id+page_no）查找数据页位于哪个buffer pool instance中，instance_no = (space_id &laquo; 20 + space_id + page_no &raquo; 6) % instance_number，即通过space_id+page_no算出一个fold值然后按照instance取余。这里有个小细节，page_no的第六位被砍掉，这是为了保证一个extent的数据（2的6次方=64）能被缓存到同一个buffer pool instance中，便于后面的预读操作。</p>
+</li>
+<li>
+<p>在page table中查找page，返回PCB（buf_page_hash_get_low）</p>
+</li>
+<li>
+<p>如果没有在buffer pool中，并且mode为BUF_GET_IF_IN_POOL_OR_WATCH则设置watch数据页（buf_pool_watch_set）</p>
+</li>
+<li>
+<p>如果没有在buffer pool中，并且mode为BUF_GET_IF_IN_POOL | BUF_PEEK_IF_IN_POOL | BUF_GET_IF_IN_POOL_OR_WATCH，则返回null，表示没有找到数据页。</p>
+</li>
+<li>
+<p>如果没有在buffer pool中，并且mode为其他，发起磁盘同步读取（buf_read_page）(buf_read_page)。
 在读取磁盘数据之前，如果是非压缩页，则先从free链表中获取空闲的数据页，如果没有，则需要通过同步刷脏来释放数据页，最后将获取到的空闲数据页加到LRU链表上（buf_page_init_for_read）
-如果是压缩页，则临时分配一个buf_page_t用来做控制体，通过伙伴系统（buf_buddy_alloc）分配到压缩页存数据的空间，最后同样加入到LRU List中。</li>
-<li>调用IO子系统的接口同步读取页面数据（fil_io + IORequest::READ）。
+如果是压缩页，则临时分配一个buf_page_t用来做控制体，通过伙伴系统（buf_buddy_alloc）分配到压缩页存数据的空间，最后同样加入到LRU List中。</p>
+</li>
+<li>
+<p>调用IO子系统的接口同步读取页面数据（fil_io + IORequest::READ）。
 如果读取失败，重试100次（BUF_PAGE_READ_MAX_RETRIES，每次重新从#1开始），然后触发断言中止mysqld（Unable to read page + abort）
-如果成功，则判断是否要进行随机预读（buf_read_ahead_random）</li>
-<li>判断读取的数据页是不是压缩页，如果是的话，因为从磁盘中读取的压缩页的控制体是临时分配的，所以需要重新分配block（buf_LRU_get_free_block），把临时分配的buf_page_t给释放掉，用buf_relocate函数替换掉，接着进行解压，解压成功后，设置state为BUF_BLOCK_FILE_PAGE，最后加入Unzip LRU链表中。</li>
-<li>接着，我们判断这个页是否是第一次访问（buf_page_is_accessed），如果是则设置buf_page_t::access_time。
-如果mode不为BUF_PEEK_IF_IN_POOL，判断是否把这个数据页移到young list中（buf_page_make_young_if_needed）。
+如果成功，则判断是否要进行随机预读（buf_read_ahead_random）</p>
+</li>
+<li>
+<p>判断读取的数据页是不是压缩页，如果是的话，因为从磁盘中读取的压缩页的控制体是临时分配的，所以需要重新分配block（buf_LRU_get_free_block），把临时分配的buf_page_t给释放掉，用buf_relocate函数替换掉，接着进行解压，解压成功后，设置state为BUF_BLOCK_FILE_PAGE，最后加入Unzip LRU链表中。</p>
+</li>
+<li>
+<p>接着，我们判断这个页是否是第一次访问（buf_page_is_accessed），如果是则设置buf_page_t::access_time。</p>
+<p>如果mode不为BUF_PEEK_IF_IN_POOL，判断是否把这个数据页移到young list中（buf_page_make_young_if_needed）。
 如果mode不为BUF_GET_NO_LATCH，给数据页加上读写锁。
-如果mode不为BUF_PEEK_IF_IN_POOL，并且这个数据页是第一次访问，则判断是否需要进行线性预读。</li>
+如果mode不为BUF_PEEK_IF_IN_POOL，并且这个数据页是第一次访问，则判断是否需要进行线性预读。</p>
+</li>
 </ol>
 <p>从这里可以看出，#5是性能的重点，如果buffer pool中没有数据页，会产生同步IO，并且，如果没有空闲的PCB，则还可能需要进行同步刷脏，这会造成明显的stall，所以我们在日常的运维中需要格外关注这种场景。</p>
 <h3 id="为物理读取准备pcb">
@@ -1099,10 +1114,10 @@ logical read-ahead很好的提升了离散存储数据的吞吐能力，Facebook
   <a class="anchor" href="#%e9%a1%b5%e7%9a%84%e6%9b%b4%e6%96%b0%e6%b5%81%e7%a8%8b">#</a>
 </h2>
 <p>页的更改流程为：页面的更新通过FIX rules进行保护，并在FIX期间生产变更的日志（mini-transaction）存入private repo，并在mtr.commit时写入redo log buffer，然后依赖force-log-at-commit在事务提交时将日志持久化。而实际的脏页随后再以异步的方式写回磁盘。</p>
-<h3 id="加入flush-list">
+<h2 id="加入flush-list">
   加入flush list
   <a class="anchor" href="#%e5%8a%a0%e5%85%a5flush-list">#</a>
-</h3>
+</h2>
 <p>flust list中保存的是虽有未写回磁盘原处的脏页，这些脏页在mtr.commit时加入flush list（release_latches），并释放latch（具体流程在mini-transaction中详细介绍）。一旦写入到flush list中，flush list的页面顺序就不再更改，即flush list的顺序是按照mtr.commit，也就是LSN的顺序排列的（oldest_modification），这从语义上代表着写入序（变更序）。如果页面再次发生修改，则更新newest_modification。</p>
 <h1 id="页的刷回">
   页的刷回
@@ -1177,6 +1192,25 @@ logical read-ahead很好的提升了离散存储数据的吞吐能力，Facebook
 </h3>
 <p>我们以一张图的方式从整体和细节上来纵览：</p>
 <p><img src="/InnoDB_buffer_pool_flush_page.png" alt="InnoDB_buffer_pool_flush_page" /></p>
+<h1 id="mysql-80改进">
+  MySQL 8.0改进
+  <a class="anchor" href="#mysql-80%e6%94%b9%e8%bf%9b">#</a>
+</h1>
+<p>MySQL在宕机时，会生成巨大的core文件。在MySQL 8.0.14中，引入了<a href="https://dev.mysql.com/doc/refman/8.0/en/innodb-parameters.html#sysvar_innodb_buffer_pool_in_core_file">innodb_buffer_pool_in_core_file</a>在core文件中剔除缓冲池页面，极大的缩小了core文件的大小。（需要linux kernel 3.4以上，支持MADV_DONTDUMP non-POSIX extension to madvise()）</p>
+<p>把全局大锁buffer pool mutex拆分了，各个链表由其专用的mutex保护，大大提升了访问扩展性。实际上这是由percona贡献给上游的，而percona在5.5版本就实现了这个特性（<a href="https://dev.mysql.com/worklog/task/?spm=a2c4e.10696291.0.0.6a8919a4Tczoe3&amp;id=8423">WL#8423</a>: InnoDB: Remove the buffer pool mutex 以及 <a href="https://bugs.mysql.com/bug.php?spm=a2c4e.10696291.0.0.21b619a4njE2AI&amp;id=75534">bug#75534</a>）。</p>
+<p>原来的一个大mutex被拆分成多个为free_list, LRU_list, zip_free, 和zip_hash单独使用mutex:</p>
+<ul>
+<li>LRU_list_mutex for the LRU_list;</li>
+<li>zip_free mutex for the zip_free arrays;</li>
+<li>zip_hash mutex for the zip_hash hash and in_zip_hash flag;</li>
+<li>free_list_mutex for the free_list and withdraw list.</li>
+<li>flush_state_mutex for init_flush, n_flush, no_flush arrays.</li>
+</ul>
+<p>由于log system采用lock-free的方式重新实现，flush_order_mutex也被移除了，带来的后果是flush list上部分page可能不是有序的，进而导致checkpoint lsn和以前不同，不再是某个log record的边界，而是可能在某个日志的中间，给崩溃恢复带来了一定的复杂度（需要回溯日志）</p>
+<p>log_free_check也发生了变化，当超出同步点时，用户线程不再自己去做preflush，而是通知后台线程去做，自己在那等待(log_request_checkpoint), log_checkpointer线程会去考虑log_consider_sync_flush，这时候如果你打开了参数innodb_flush_sync的话, 那么flush操作将由page cleaner线程来完成，此时page cleaner会忽略io capacity的限制，进入激烈刷脏</p>
+<p>8.0还增加了一个新的参数叫innodb_fsync_threshold，，例如创建文件时，会设置文件size,如果服务器有多个运行的实例，可能会对其他正常运行的实例产生明显的冲击。为了解决这个问题，从8.0.13开始，引入了这个阈值，代码里在函数os_file_set_size注入，这个函数通常在创建或truncate文件之类的操作时调用，表示每写到这么多个字节时，要fsync一次，避免对系统产生冲击。这个补丁由facebook贡献给上游。</p>
+<p>其他 当然也有些辅助结构来快速查询buffer pool:</p>
+<p>adaptive hash index: 直接把叶子节点上的记录索引了，在满足某些条件时，可以直接定位到叶子节点上，无需从根节点开始扫描，减少读的page个数 page hash: 每个buffer pool instance上都通过辅助的page hash来快速访问其中存储的page，读加s锁，写入新page加x锁。page hash采用分区的结构，默认为16，有一个参数innodb_page_hash_locks，但很遗憾，目前代码里是debug only的，如果你想配置这个参数，需要稍微修改下代码，把参数定义从debug宏下移出来 change buffer: 当二级索引页不在时，可以把操作缓存到ibdata里的一个btree(ibuf)中，下次需要读入这个page时，再做merge；另外后台master线程会也会尝试merge ibuf。</p>
 </article>
  
       
@@ -1268,11 +1302,8 @@ logical read-ahead很好的提升了离散存储数据的吞吐能力，Facebook
     </li>
     <li><a href="#页的更新">页的更新</a>
       <ul>
-        <li><a href="#页的更新流程">页的更新流程</a>
-          <ul>
-            <li><a href="#加入flush-list">加入flush list</a></li>
-          </ul>
-        </li>
+        <li><a href="#页的更新流程">页的更新流程</a></li>
+        <li><a href="#加入flush-list">加入flush list</a></li>
       </ul>
     </li>
     <li><a href="#页的刷回">页的刷回</a>
@@ -1285,6 +1316,7 @@ logical read-ahead很好的提升了离散存储数据的吞吐能力，Facebook
         </li>
       </ul>
     </li>
+    <li><a href="#mysql-80改进">MySQL 8.0改进</a></li>
   </ul>
 </nav>
 
