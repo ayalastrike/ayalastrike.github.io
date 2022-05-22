@@ -7,18 +7,6 @@
     <generator>Hugo -- gohugo.io</generator><atom:link href="https://ayalastrike.github.io/docs/MySQL/InnoDB/index.xml" rel="self" type="application/rss+xml" />
     <item>
       <title></title>
-      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/1_overview/</link>
-      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
-      
-      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/1_overview/</guid>
-      <description>Heikki Tuuri是InnoDB存储引擎的创始人，1964年生于芬兰赫尔辛基。与著名Linux操作系统的创始人Linus一样毕业于芬兰赫尔辛基大学。从入学时间来看，Heikki Tuuri还是Linus的学长。在1990年取得赫尔辛基大学的数理逻辑博士学位后。
-所以，innodb的代码大部分都是Created mm/dd/YYYY Heikki Tuuri。
-MySQL大事时间表：
- 1995：Heikki Tuuri成立Innobase Oy公司并担任CEO。同年，由David Axmark、Allan Larsson和Michael Monty Widenius在瑞典创办MySQL AB公司。 2001：Innobase公司开始与MySQL AB公司进行合作并开源InnoDB存储引擎的代码。 2005：Oracle公司收购了Innobase公司。 2008：Sun收购MySQL AB公司。 2009：2009年4月20日，Sun 公司董事会通过决议，同意以每股9.5美元的价格将公司出售给Oracle。  </description>
-    </item>
-    
-    <item>
-      <title></title>
       <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/2_source/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
@@ -34,29 +22,76 @@ MySQL大事时间表：
     </item>
     
     <item>
-      <title></title>
-      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/3_basic_structure_algo/</link>
+      <title>B&#43; tree</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/7_b&#43;_tree/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/3_basic_structure_algo/</guid>
-      <description></description>
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/7_b&#43;_tree/</guid>
+      <description>在InnoDB中，数据的存储组织为IoT，采用B+ tree的数据结构提供高效访问数据的方式（存取路径）。
+在B+ tree实现中，两块内容最为重要，一块是concurrency control，一块是SMO（Struct Modification Operations）。
+演进 #  B+ tree是由二叉查找树、平衡二叉树、B-tree演进而来的。
+二叉查找树 BST（Binary Search Tree）
+平衡二叉树 AVL（Balanced Binary Tree）
+在计算机科学中，AVL树是最早被发明的自平衡二叉查找树。在AVL树中，任一节点对应的两棵子树的最大高度差为1，因此它也被称为高度平衡树。查找、插入和删除在平均和最坏情况下的时间复杂度都是O(logn)。增加和删除元素的操作则可能需要借由一次或多次树旋转，以实现树的重新平衡。AVL 树得名于它的发明者 G. M. Adelson-Velsky 和 Evgenii Landis，他们在1962年的论文《An algorithm for the organization of information》中公开了这一数据结构。
+ 二叉查找树 BST（Binary Search Tree） #  我们在介绍B+ tree之前，先了解一下binary search tree。在BST中，左子树的键值总是小于根的键值，右子树的键值总是大于根的键值。因此可以通过中序遍历得到键值的排序输出。
+中序遍历（LDR - Inorder Traversal）是二叉树遍历的一种，也叫做中根遍历、中序周游。在二叉树中，中序遍历首先遍历左子树，然后访问根结点，最后遍历右子树。
+比如有如下二叉查找树：
+中序遍历后输出：2、3、5、6、7、8。
+二叉查找树的平均查找速度比顺序查找来得更快：顺序查找的平均查找次数为(1+2+3+4+5+6)/6=3.3次，二叉查找树的平均查找次数为(3+3+3+2+2+1)/6=2.3次。
+但是，二叉查找树可以任意地构造，如果构造成下面的二叉查找树：
+则平均查找次数为(1+2+3+4+5+5)/6=3.16次，和顺序查找差不多。而二叉查找树的查找效率取决于树的高度，因此若想最大性能地构造一个二叉查找树，需要这棵二叉查找树是平衡的（即树的高度最小），因此引出了平衡二叉树，或称为AVL tree。
+平衡二叉树 AVL tree（Balanced Binary Tree） #  平衡二叉树的定义如下：首先符合二叉查找树的定义，其次必须满足任何节点的两个儿子子树的高度最大差为1。显然，上图不满足平衡二叉树的定义，而下图是一棵平衡二叉树。平衡二叉树对于查找的性能是比较高的，但不是最高的，只是接近最高性能。最好的性能需要建立一棵最优二叉树，但是最优二叉树的建议和维护需要大量的操作，因此，用户一般只需建立一棵平衡二叉树即可。
+平衡二叉树对于查询速度的确很快，但是维护一棵平衡二叉树的代价是需要付出代价的。通常来说，需要1次或多次左旋和右旋来得到插入或更新后树的平衡性。
+比如插入9，需要左旋以保证平衡：
+有的情况可能需要多次：
+上面2个图都是插入的例子，更新和删除操作同理，也是通过左旋或者右旋来完成的。因此对于一棵平衡树的维护是有一定开销的，不过平衡二叉树多用于内存结构对象中，因此维护的开销相对较小。
+平衡因子 = 左子树深度/高度 - 右子树深度/高度</description>
     </item>
     
     <item>
-      <title></title>
-      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/4_os/</link>
+      <title>buffer pool</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/6_buffer_pool/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/4_os/</guid>
-      <description></description>
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/6_buffer_pool/</guid>
+      <description>基于磁盘的数据库系统通常都是用缓冲池（buffer pool）技术来弥补CPU和磁盘之间的速度鸿沟。
+通过以下机制来达成目标：
+spatial control 空间控制
+ where to write pages on disk. the goal is to keep pages that are used together often as physically close together as possible on disk.  temporal control 时间控制
+ when to read pages into memory, and when to write them to disk. the goal is minimize the number of stalls from having to read data from disk.  在以下章节中，InnoDB数据结构中的buf_block_t，buf_page_t、frame按照Jim Gray的命名进行转换，称为block（以下称为PCB，包含meta+data）、meta和frame（data）。
+概述 #  buffer pool #  InnoDB是基于磁盘存储的存储引擎，磁盘中的记录以页为单位进行管理。</description>
     </item>
     
     <item>
-      <title></title>
-      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/5_record/</link>
+      <title>overview</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/1_overview/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/5_record/</guid>
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/1_overview/</guid>
+      <description>Heikki Tuuri是InnoDB存储引擎的创始人，1964年生于芬兰赫尔辛基。与著名Linux操作系统的创始人Linus一样毕业于芬兰赫尔辛基大学。从入学时间来看，Heikki Tuuri还是Linus的学长。在1990年取得赫尔辛基大学的数理逻辑博士学位后。
+所以，innodb的代码大部分都是Created mm/dd/YYYY Heikki Tuuri。
+MySQL大事时间表：
+ 1995：Heikki Tuuri成立Innobase Oy公司并担任CEO。同年，由David Axmark、Allan Larsson和Michael Monty Widenius在瑞典创办MySQL AB公司。 2001：Innobase公司开始与MySQL AB公司进行合作并开源InnoDB存储引擎的代码。 2005：Oracle公司收购了Innobase公司。 2008：Sun收购MySQL AB公司。 2009：2009年4月20日，Sun 公司董事会通过决议，同意以每股9.5美元的价格将公司出售给Oracle。  </description>
+    </item>
+    
+    <item>
+      <title>page</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/4_page/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/4_page/</guid>
+      <description>InnoDB使用的是索引组织表，因此聚簇索引的叶子节点中存放完整的数据记录，辅助索引页的叶子节点中存放指向聚簇索引页叶子节点的书签（bookmark），也可以称为路标。
+主要是两部分：
+ page layout scan rec with cursor, and then insert, update, delete  页 #  页是InnoDB存储数据的基本单位。页的大小可以设置为4K~64K（4K的倍数），默认为16K。页的大小设置要从IO性能考虑。
+/* Define the Min, Max, Default page sizes. */ /** Minimum Page Size Shift (power of 2) */ #define UNIV_PAGE_SIZE_SHIFT_MIN 12 /** Maximum Page Size Shift (power of 2) */ #define UNIV_PAGE_SIZE_SHIFT_MAX 16 /** Default Page Size Shift (power of 2) */ #define UNIV_PAGE_SIZE_SHIFT_DEF 14 static MYSQL_SYSVAR_ULONG(page_size, srv_page_size, PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY, &amp;quot;Page size to use for all InnoDB tablespaces.</description>
+    </item>
+    
+    <item>
+      <title>record</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/3_record/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/3_record/</guid>
       <description>设计 #  行存 #  MySQL主要面向的是OLTP场景，所以InnoDB中存储的数据采用行存（NSM - n-ary storage model）。
 基于行进行存储有以下几个好处：
  记录存放在一个页中，存储一条记录需要访问的页面较少 符合传统机械硬盘的访问方式 易于理解，数据的存取就像是对一张二维表进行访问  在整体上看，表中的数据是按照如下形式组织的：
@@ -71,23 +106,11 @@ MySQL大事时间表：
     </item>
     
     <item>
-      <title></title>
-      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/6_page/</link>
+      <title>storage</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/5_storage/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/6_page/</guid>
-      <description>InnoDB使用的是索引组织表，因此聚簇索引的叶子节点中存放完整的数据记录，辅助索引页的叶子节点中存放指向聚簇索引页叶子节点的书签（bookmark），也可以称为路标。
-主要是两部分：
- page layout scan rec with cursor, and then insert, update, delete  页 #  页是InnoDB存储数据的基本单位。页的大小可以设置为4K~64K（4K的倍数），默认为16K。页的大小设置要从IO性能考虑。
-/* Define the Min, Max, Default page sizes. */ /** Minimum Page Size Shift (power of 2) */ #define UNIV_PAGE_SIZE_SHIFT_MIN 12 /** Maximum Page Size Shift (power of 2) */ #define UNIV_PAGE_SIZE_SHIFT_MAX 16 /** Default Page Size Shift (power of 2) */ #define UNIV_PAGE_SIZE_SHIFT_DEF 14 static MYSQL_SYSVAR_ULONG(page_size, srv_page_size, PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY, &amp;quot;Page size to use for all InnoDB tablespaces.</description>
-    </item>
-    
-    <item>
-      <title></title>
-      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/7_storage/</link>
-      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
-      
-      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/7_storage/</guid>
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/5_storage/</guid>
       <description>存储管理是数据库系统最基本的功能，本章将介绍InnoDB存储引擎中数据在外存中的组织形式（即数据文件）、数据文件在内存中的管理方式以及数据在文件层次的读/写。
 存储组织 #  存储管理需要解决以下2个问题：
  如何在存储设备上表示和组织数据库中的数据 如何在内存和外存上控制数据的存取  一般来说，DBMS不直接使用操作系统提供的文件系统作为直接的存储，而是在文件系统之上封装了一层自己对于存储设备的管理，以保证数据的完整性和存取效率。目前大部分的文件系统即使提供了日志的支持，可以保证写的原子性，但是数据库的数据页可能大于文件系统中的block大小，仍然避免不了出现的半写（partial-write）问题，所以数据库也要解决半写问题。
@@ -106,48 +129,6 @@ fil_system_t、fil_space_t、fil_node_t的关系如图所示：
 表空间 #  首先先让我们从用户和系统管理的角度来了解表空间的使用场景，以便对表空间有一个直观的认识。
 使用场景 #  在MySQL 5.7中，表空间按照使用场景分为五种：
  系统表空间 独立表空间 通用表空间 undo表空间 临时表空间  系统表空间 #  系统表空间位于datadir下，存放了InnoDB存储引擎的核心信息，包括数据字典、事务系统信息、double write buffer、change buffer。如果没有配置独立的undo表空间，则undo日志也存放在这里（临时表空间也是如此）。同样，如果没有开启独立表空间（file-per-table），则用户表的数据和索引也存放在这里。因此，系统表空间也被称为共享表空间。</description>
-    </item>
-    
-    <item>
-      <title></title>
-      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/8_buffer_pool/</link>
-      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
-      
-      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/8_buffer_pool/</guid>
-      <description>基于磁盘的数据库系统通常都是用缓冲池（buffer pool）技术来弥补CPU和磁盘之间的速度鸿沟。
-通过以下机制来达成目标：
-spatial control 空间控制
- where to write pages on disk. the goal is to keep pages that are used together often as physically close together as possible on disk.  temporal control 时间控制
- when to read pages into memory, and when to write them to disk. the goal is minimize the number of stalls from having to read data from disk.  在以下章节中，InnoDB数据结构中的buf_block_t，buf_page_t、frame按照Jim Gray的命名进行转换，称为block（以下称为PCB，包含meta+data）、meta和frame（data）。
-概述 #  buffer pool #  InnoDB是基于磁盘存储的存储引擎，磁盘中的记录以页为单位进行管理。</description>
-    </item>
-    
-    <item>
-      <title></title>
-      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/9_b_tree/</link>
-      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
-      
-      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/9_b_tree/</guid>
-      <description>在InnoDB中，数据的存储组织为IoT，采用B+ tree的数据结构提供高效访问数据的方式（存取路径）。
-演进 #  B+ tree是由二叉查找树、平衡二叉树、B-tree演进而来的。
-二叉查找树 BST（Binary Search Tree）
-平衡二叉树 AVL（Balanced Binary Tree）
-在计算机科学中，AVL树是最早被发明的自平衡二叉查找树。在AVL树中，任一节点对应的两棵子树的最大高度差为1，因此它也被称为高度平衡树。查找、插入和删除在平均和最坏情况下的时间复杂度都是O(logn)。增加和删除元素的操作则可能需要借由一次或多次树旋转，以实现树的重新平衡。AVL 树得名于它的发明者 G. M. Adelson-Velsky 和 Evgenii Landis，他们在1962年的论文《An algorithm for the organization of information》中公开了这一数据结构。
- 二叉查找树 BST（Binary Search Tree） #  我们在介绍B+ tree之前，先了解一下binary search tree。在BST中，左子树的键值总是小于根的键值，右子树的键值总是大于根的键值。因此可以通过中序遍历得到键值的排序输出。
-中序遍历（LDR - Inorder Traversal）是二叉树遍历的一种，也叫做中根遍历、中序周游。在二叉树中，中序遍历首先遍历左子树，然后访问根结点，最后遍历右子树。
-比如有如下二叉查找树：
-中序遍历后输出：2、3、5、6、7、8。
-二叉查找树的平均查找速度比顺序查找来得更快：顺序查找的平均查找次数为(1+2+3+4+5+6)/6=3.3次，二叉查找树的平均查找次数为(3+3+3+2+2+1)/6=2.3次。
-但是，二叉查找树可以任意地构造，如果构造成下面的二叉查找树：
-则平均查找次数为(1+2+3+4+5+5)/6=3.16次，和顺序查找差不多。而二叉查找树的查找效率取决于树的高度，因此若想最大性能地构造一个二叉查找树，需要这棵二叉查找树是平衡的（即树的高度最小），因此引出了平衡二叉树，或称为AVL tree。
-平衡二叉树 AVL tree（Balanced Binary Tree） #  平衡二叉树的定义如下：首先符合二叉查找树的定义，其次必须满足任何节点的两个儿子子树的高度最大差为1。显然，上图不满足平衡二叉树的定义，而下图是一棵平衡二叉树。平衡二叉树对于查找的性能是比较高的，但不是最高的，只是接近最高性能。最好的性能需要建立一棵最优二叉树，但是最优二叉树的建议和维护需要大量的操作，因此，用户一般只需建立一棵平衡二叉树即可。
-平衡二叉树对于查询速度的确很快，但是维护一棵平衡二叉树的代价是需要付出代价的。通常来说，需要1次或多次左旋和右旋来得到插入或更新后树的平衡性。
-比如插入9，需要左旋以保证平衡：
-有的情况可能需要多次：
-上面2个图都是插入的例子，更新和删除操作同理，也是通过左旋或者右旋来完成的。因此对于一棵平衡树的维护是有一定开销的，不过平衡二叉树多用于内存结构对象中，因此维护的开销相对较小。
-平衡因子 = 左子树深度/高度 - 右子树深度/高度
-以下的动图更直观一些：
-平衡多路查找树 B-tree #  B-tree是为磁盘等外存储设备而设计的一种平衡查找树。</description>
     </item>
     
   </channel>
