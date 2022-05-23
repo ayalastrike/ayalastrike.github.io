@@ -46,14 +46,14 @@
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/InnoDB/7_b&#43;_tree/" /><meta property="article:section" content="docs" />
 
-
+<meta property="article:modified_time" content="2022-05-23T18:23:28&#43;08:00" />
 
 <title>B&#43; tree | Rick&#39;s Blog</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.3aba6ccc00bcbf5b3bbb11c7315100d856279675f721800da73452ba22df48ec.js" integrity="sha256-OrpszAC8v1s7uxHHMVEA2FYnlnX3IYANpzRSuiLfSOw=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.060ce6c1149f7865047c0927acccf1c977557a0be744ae0f75c37f29c8c7b423.js" integrity="sha256-BgzmwRSfeGUEfAknrMzxyXdVegvnRK4PdcN/KcjHtCM=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -234,6 +234,63 @@ https://github.com/alex-shpak/hugo-book
         </li>
         <li><a href="#页的合并">页的合并</a></li>
         <li><a href="#页的回收">页的回收</a></li>
+      </ul>
+    </li>
+    <li><a href="#页的查找">页的查找</a>
+      <ul>
+        <li><a href="#非叶子节点的mode">非叶子节点的mode</a></li>
+        <li><a href="#latch_mode">latch_mode</a></li>
+        <li><a href="#btr-cursor">btr cursor</a></li>
+        <li><a href="#持久游标">持久游标</a></li>
+      </ul>
+    </li>
+    <li><a href="#b-tree中变更记录">B+ tree中变更记录</a>
+      <ul>
+        <li><a href="#插入记录">插入记录</a>
+          <ul>
+            <li><a href="#乐观插入">乐观插入</a></li>
+            <li><a href="#悲观插入">悲观插入</a></li>
+          </ul>
+        </li>
+        <li><a href="#更新记录">更新记录</a>
+          <ul>
+            <li><a href="#非主键更新">非主键更新</a>
+              <ul>
+                <li><a href="#原地更新">原地更新</a></li>
+                <li><a href="#乐观更新">乐观更新</a></li>
+                <li><a href="#悲观更新">悲观更新</a></li>
+              </ul>
+            </li>
+            <li><a href="#主键更新">主键更新</a></li>
+          </ul>
+        </li>
+        <li><a href="#删除记录">删除记录</a>
+          <ul>
+            <li><a href="#delete-mark">delete mark</a></li>
+            <li><a href="#purge-deleted-index-record">purge deleted index record</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><a href="#自适应哈希索引转">自适应哈希索引（转）</a>
+      <ul>
+        <li><a href="#创建ahi">创建AHI</a></li>
+        <li><a href="#维护ahi的查询信息">维护AHI的查询信息</a>
+          <ul>
+            <li><a href="#更新索引的查询信息">更新索引的查询信息</a></li>
+            <li><a href="#更新block的查询信息">更新block的查询信息</a></li>
+            <li><a href="#build-ahi">build AHI</a></li>
+            <li><a href="#index-search-info">index search info</a></li>
+          </ul>
+        </li>
+        <li><a href="#使用ahi">使用AHI</a></li>
+        <li><a href="#shortcut查询模式">shortcut查询模式</a></li>
+        <li><a href="#ahi运维和监控项">AHI运维和监控项</a>
+          <ul>
+            <li><a href="#ahi参数">AHI参数</a></li>
+            <li><a href="#ahi监控项">AHI监控项</a></li>
+          </ul>
+        </li>
       </ul>
     </li>
   </ul>
@@ -942,7 +999,837 @@ page 7
 <li>根据待删除记录的下一条记录，构造一个新的node pointer，其中指向子节点的page no不变</li>
 <li>将#2构造的node pointer插入到当前节点的父节点中，即更新父节点中的node pointer</li>
 </ol>
-</article>
+<h1 id="页的查找">
+  页的查找
+  <a class="anchor" href="#%e9%a1%b5%e7%9a%84%e6%9f%a5%e6%89%be">#</a>
+</h1>
+<p>通过B+ tree查找是InnoDB中最为常见的操作，无论是查询，还是增删改，都需要首先定位到所需操作的记录。在InnoDB中，通过btr_cur_search_to_nth_level来查找指定的记录。</p>
+<p>btr_cur_search_to_nth_level的函数原型为：</p>
+<pre><code>/********************************************************************//**
+Searches an index tree and positions a tree cursor on a given level.
+NOTE: n_fields_cmp in tuple must be set so that it cannot be compared
+to node pointer page number fields on the upper levels of the tree!
+Note that if mode is PAGE_CUR_LE, which is used in inserts, then
+cursor-&gt;up_match and cursor-&gt;low_match both will have sensible values.
+If mode is PAGE_CUR_GE, then up_match will a have a sensible value. */
+void
+btr_cur_search_to_nth_level(
+/*========================*/
+	dict_index_t*	index,	/*!&lt; in: index */
+	ulint		level,	/*!&lt; in: the tree level of search */
+	const dtuple_t*	tuple,	/*!&lt; in: data tuple; NOTE: n_fields_cmp in
+				tuple must be set so that it cannot get
+				compared to the node ptr page number field! */
+	page_cur_mode_t	mode,	/*!&lt; in: PAGE_CUR_L, ...;
+				NOTE that if the search is made using a unique
+				prefix of a record, mode should be PAGE_CUR_LE,
+				not PAGE_CUR_GE, as the latter may end up on
+				the previous page of the record! Inserts
+				should always be made using PAGE_CUR_LE to
+				search the position! */
+	ulint		latch_mode, /*!&lt; in: BTR_SEARCH_LEAF, ..., ORed with
+				at most one of BTR_INSERT, BTR_DELETE_MARK,
+				BTR_DELETE, or BTR_ESTIMATE;
+				cursor-&gt;left_block is used to store a pointer
+				to the left neighbor page, in the cases
+				BTR_SEARCH_PREV and BTR_MODIFY_PREV;
+				NOTE that if has_search_latch
+				is != 0, we maybe do not have a latch set
+				on the cursor page, we assume
+				the caller uses his search latch
+				to protect the record! */
+	btr_cur_t*	cursor, /*!&lt; in/out: tree cursor; the cursor page is
+				s- or x-latched, but see also above! */
+	ulint		has_search_latch,
+				/*!&lt; in: latch mode the caller
+				currently has on search system:
+				RW_S_LATCH, or 0 */
+	const char*	file,	/*!&lt; in: file name */
+	ulint		line,	/*!&lt; in: line where called */
+	mtr_t*		mtr);	/*!&lt; in: mtr */
+</code></pre><p>btr_cur_search_to_nth_level中的mode表示查询模式，但在具体的查询场景上有不同的使用限制：</p>
+<ul>
+<li>非叶子节点上进行查询时，其mode只能为LE/L，GE→L G→ LE</li>
+<li>对于insert，其在叶子节点上总是通过LE进行定位待插入记录的前一条记录</li>
+<li>对主键和唯一索引进行查询时，只能为GE，而不能为LE，这是因为InnoDB支持MVCC，因此即使有唯一性约束，但在实际的页中仍然可能包含多个键值相同的记录，只是其中仅有一个记录的delete flag=0，并且该记录总是在最后一个</li>
+</ul>
+<blockquote class="book-hint info">
+  比如如下的叶子节点的主键记录，对于用户来说，看到的主键记录只有1, 2, 3, 4, 5：(1, &lsquo;A&rsquo;), *(2, &lsquo;B&rsquo;), (2, &lsquo;C&rsquo;), *(3, &lsquo;D&rsquo;), (3, &lsquo;E&rsquo;), (4, &lsquo;F&rsquo;), (5, &lsquo;G&rsquo;)如果根据LE查询为3的记录，则会得到记录的前一个页，很显然这会引起并发错误。
+</blockquote>
+
+<p><img src="/InnoDB_b&#43;tree_search_mode.png" alt="InnoDB_b&#43;tree_search_mode" /></p>
+<blockquote class="book-hint danger">
+  这里留给读者一个问题：为什么删除的记录在左边，delete=flag=0的记录一定在右边呢？
+</blockquote>
+
+<h2 id="非叶子节点的mode">
+  非叶子节点的mode
+  <a class="anchor" href="#%e9%9d%9e%e5%8f%b6%e5%ad%90%e8%8a%82%e7%82%b9%e7%9a%84mode">#</a>
+</h2>
+<p>对于非叶子节点，其mode只能为LE/L，即GE→L，G→ LE。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">	<span style="color:#0f0">/* We use these modified search modes on non-leaf levels of the
+</span><span style="color:#0f0">	B-tree. These let us end up in the right B-tree leaf. In that leaf
+</span><span style="color:#0f0">	we use the original search mode. */</span>
+
+	<span style="color:#f00">switch</span> (mode) {
+	<span style="color:#f00">case</span> PAGE_CUR_GE:
+		page_mode = PAGE_CUR_L;
+		<span style="color:#f00">break</span>;
+	<span style="color:#f00">case</span> PAGE_CUR_G:
+		page_mode = PAGE_CUR_LE;
+		<span style="color:#f00">break</span>;
+	<span style="color:#f00">default</span>:
+		page_mode = mode;
+		<span style="color:#f00">break</span>;
+	}
+</code></pre></div><p>这是由B+ tree的特点所决定的，即依左搜索（上面图中的灰色框），然后通过取下一个记录的方式实现mode翻转，恢复正常（L→GE G→LE ）。这样会遇到一个问题，即通过mode L、LE定位到的low为supremum，需要再搜索下一页的第一条用户记录才能得到最终的记录（high）。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">	<span style="color:#0f0">/* PHASE 4: Look for matching records in a loop */</span>
+
+	<span style="color:#f00">if</span> (page_rec_is_supremum(rec)) {
+
+		<span style="color:#0f0">/* A page supremum record cannot be in the result set: skip
+</span><span style="color:#0f0">		it now that we have placed a possible lock on it */</span>
+
+		prev_rec = NULL;
+		<span style="color:#f00">goto</span> next_rec;
+	}
+</code></pre></div><blockquote class="book-hint danger">
+  这里留给读者一个问题：B+ tree的特点为什么决定了要依左搜索？
+</blockquote>
+
+<h2 id="latch_mode">
+  latch_mode
+  <a class="anchor" href="#latch_mode">#</a>
+</h2>
+<p>latch_mode表示在搜索过程中需要对page和index加的latch种类：</p>
+<table>
+<thead>
+<tr>
+<th>latch_mode</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BTR_SEARCH_LEAF</td>
+<td>查找leaf page，index加s-latch，leaf page加s-latch后释放index s-latch</td>
+</tr>
+<tr>
+<td>BTR_MODIFY_LEAF</td>
+<td>修改leaf page，index加s-latch，leaf page加x-latch后释放index s-latch</td>
+</tr>
+<tr>
+<td>BTR_NO_LATCHES</td>
+<td>index加s-latch，leaf page不加任何latch</td>
+</tr>
+<tr>
+<td>BTR_MODIFY_TREE</td>
+<td>修改B+树，index加x-latch，leaf page加x-latch</td>
+</tr>
+<tr>
+<td>BTR_CONT_MODIFY_TREE</td>
+<td>修改B+树（继续），函数开始前对index已加x-latch，对leaf page已加x-latch</td>
+</tr>
+<tr>
+<td>BTR_SEARCH_PREV</td>
+<td>查找leaf page→prev，对leaf page加s-latch</td>
+</tr>
+<tr>
+<td>BTR_MODIFY_PREV</td>
+<td>修改leaf page→prev，对leaf page加x-latch</td>
+</tr>
+<tr>
+<td>BTR_SEARCH_TREE</td>
+<td>搜索B+树</td>
+</tr>
+<tr>
+<td>BTR_CONT_SEARCH_TREE</td>
+<td>搜索B+树（继续）</td>
+</tr>
+</tbody>
+</table>
+<p>如果btr_cur_search_to_nth_level最终定位到的页不是叶子节点，即level大于0，那么对页加x-latch，同时不释放索引内存对象上的latch保护；否则根据latch_mode对叶子节点加上latch保护，并根据latch_mode选择是否释放索引对象上的latch保护。</p>
+<p>从上面的latch_mode中我们可以发现，InnoDB总是先对index加上s-latch保护，随后进行页的操作，如果insert/update/djelete操作不会引起非叶子节点发生变化，即不会发生分裂、合并、树的高度变化，则在定位到leaf page后立即释放index的s-latch，这种方式称为乐观方式；否则，立即释放index及leaf page上的latch，并通过悲观方式对index和leaf page加x-latch保护。</p>
+<blockquote class="book-hint info">
+  这里的latch_mode指定是朴素的latch方式，也就是优化前的index concurrency control
+</blockquote>
+
+<p>另外，latch_mode中还包含以下的flag：</p>
+<ul>
+<li>BTR_INSERT</li>
+<li>BTR_ESTIMATE</li>
+<li>BTR_IGNORE_SEC_UNIQUE</li>
+<li>BTR_DELETE_MARK</li>
+<li>BTR_DELETE</li>
+<li>BTR_ALREADY_S_LATCHED</li>
+<li>BTR_LATCH_FOR_INSERT</li>
+<li>BTR_LATCH_FOR_DELETE</li>
+<li>BTR_RTREE_UNDO_INS</li>
+<li>BTR_MODIFY_EXTERNAL</li>
+<li>BTR_RTREE_DELETE_MARK</li>
+</ul>
+<p>BTR_ESTIMATE表示需要对返回的结果集数量进行预估，仅在RANGE查询开始前需要进行预估操作。</p>
+<h2 id="btr-cursor">
+  btr cursor
+  <a class="anchor" href="#btr-cursor">#</a>
+</h2>
+<p>btr cursor用于表示B+ tree的查找，其数据结构如下：</p>
+<pre><code>struct btr_cur_t {
+	dict_index_t*	index;		此次查询所使用的的索引
+	page_cur_t	page_cur;		page cursor
+	purge_node_t*	purge_node;	/*!&lt; purge node, for BTR_DELETE */
+	buf_block_t*	left_block;	左兄弟页，用于BTR_SEARCH_PREV/BTR_MODIFY_PREV
+	que_thr_t*	thr;			/*!&lt; this field is only used when btr_cur_search_to_nth_level is called for an index entry insertion: the calling query thread is passed here to be used in the insert buffer */
+
+	// 以下通过btr_cur_search_to_nth_level赋值
+	enum btr_cur_method	flag;	使用何种方式查询得到的记录结果
+								BTR_CUR_HASH = 1		AHI
+								BTR_CUR_HASH_FAIL		AHI-&gt;B+ tree
+								BTR_CUR_BINARY,			B+ tree
+								BTR_CUR_INSERT_TO_IBUF	/*!&lt; performed the intended insert to the insert buffer */
+								BTR_CUR_DEL_MARK_IBUF	/*!&lt; performed the intended delete mark in the insert/delete buffer */
+								BTR_CUR_DELETE_IBUF		/*!&lt; performed the intended delete in the insert/delete buffer */
+								BTR_CUR_DELETE_REF	/*!&lt; row_purge_poss_sec() failed */
+	ulint		tree_height;	查询所在的层
+	ulint		up_match;		page_cur_search_with_match设置
+	ulint		up_bytes;		page_cur_search_with_match设置
+	ulint		low_match;		page_cur_search_with_match设置
+	ulint		low_bytes;		page_cur_search_with_match设置
+	ulint		n_fields;		AHI介绍
+	ulint		n_bytes;		AHI介绍
+	ulint		fold;			fold value，用于BTR_CUR_HASH
+	btr_path_t*	path_arr;		查询得到记录所走过的路径（保存每个路径上的查询信息）
+};
+</code></pre><p>其中，btr_path_t用于描述B+ tree自上而下的查询路径，每一层一个slot表示（即一个btr_path）</p>
+<pre><code>struct btr_path_t {
+	ulint	nth_rec;			查询到的记录是页中的第几个（包括伪记录）
+	ulint	n_recs;				页中的记录总数（不包括伪记录）
+	ulint	page_no;			page no
+	ulint	page_level;			page level，通过page level的变化来感知是否发生页的重组
+};
+</code></pre><p>比如在一个page中的记录信息如下：</p>
+<pre><code>	records:             (inf, a, b, c, d, sup)
+	index of the record:    0, 1, 2, 3, 4, 5
+</code></pre><p>如果查找的是记录c，则nth_rec=3，n_recs=4。</p>
+<p>我们通过nth_rec、n_recs可以预估一个range查询返回的记录数量（btr_estimate_n_rows_in_range）：</p>
+<ol>
+<li>统计range查询时两次定位之间的记录数量，即n_rows</li>
+<li>统计下层共有多少记录：n_rows = n_rows * 每个page的平均记录数</li>
+<li>当查询到leaf page后，预估range的记录数量：如果树的层数&lt;=2，则预估值 = n_rows；否则预估值 = 2 * n_rows</li>
+</ol>
+<p>在B+ tree中一个索引页至少有2个记录，所以预估值最小为n_rows * 2。</p>
+<p>我们接下来看一个例子：</p>
+<p><img src="/InnoDB_b&#43;tree_btr_cursor_btr_path.png" alt="InnoDB_b&#43;tree_btr_cursor_btr_path" /></p>
+<p>比如range查询为[40, 120)，首先通过btr_cur_search_to_nth_level(PAGE_CUR_GE 40)定位到记录40，此时查询路径为：</p>
+<pre><code>path1[0].nth_recs = 1, path1[0].n_rec = 4 // root page
+path1[1].nth_recs = 1, path1[1].n_rec = 4 // leaf page
+</code></pre><p>如果通过btr_cur_search_to_nth_level(PAGE_CUR_LE 120)定位到记录120，则查询路径为：</p>
+<pre><code>path2[0].nth_recs = 3, path2[0].n_rec = 4 // root page
+path2[1].nth_recs = 1, path2[1].n_rec = 3 // leaf page
+</code></pre><p>预估的流程为：</p>
+<ol>
+<li>统计root page页的两次记录之间的距离：n_rows = path2[0].nth_recs - path2[0].nth_recs = 3 - 1 = 2</li>
+<li>计算leaf page的平均数量：(path1[1].n_rec + path2[1].n_rec) / 2 = (4 + 3) / 2 = 7 / 2 = 3</li>
+<li>统计下层（leaf page）共有多少记录：n_rows = n_rows * (leaf page的平均数量) = 2 * 3 = 6</li>
+<li>因为已到leaf page，且树的层数&lt;=2，预估值 = n_rows = 6</li>
+</ol>
+<p>可以看到range查询实际需要遍历的记录数为7，这里预估值为6，相差不多。</p>
+<p>更进一步，InnoDB还考虑了两次查询之间树的变化情况（高度、页）。</p>
+<h2 id="持久游标">
+  持久游标
+  <a class="anchor" href="#%e6%8c%81%e4%b9%85%e6%b8%b8%e6%a0%87">#</a>
+</h2>
+<p>btr0cur模块用于对B+树索引进行search、insert、update、delete操作，并产生对应的undo log和redo log，并处理可能出现的page split和merge。但是，在大多数情况下，上层并不直接调用btr0cur中的这些相关函数，比如btr_cur_search_to_nth_level，而是通过持久游标（persistent cursor）的对象来处理select、update、delete，并且，查询到的记录也会保存在持久游标中。</p>
+<p>在进行select、update、delete操作时，首先需要定位到第一条记录，然后开始扫描下一个记录（fetch next record），直到扫描到不符合条件的记录为止。持久游标用于保存（btr_pcur_store_position）每次查询到的记录（保存在old_rec中），待查询下一条记录时，首先恢复上一次查询的记录（如果页没有发生改变，直接使用old_rec来定位下一条记录，否则，要根据old_rec中的索引键值重新定位记录再进行查询（btr_pcur_restore_position）），然后再获取下一条记录。这样设计的原因是当用户扫描记录时，页中的记录可能会发生变化。这时若按照之前的记录进行扫描，可能得到错误的情况。比如页中的记录发生了变化，或者页发生了split/merge。</p>
+<h1 id="b-tree中变更记录">
+  B+ tree中变更记录
+  <a class="anchor" href="#b-tree%e4%b8%ad%e5%8f%98%e6%9b%b4%e8%ae%b0%e5%bd%95">#</a>
+</h1>
+<h2 id="插入记录">
+  插入记录
+  <a class="anchor" href="#%e6%8f%92%e5%85%a5%e8%ae%b0%e5%bd%95">#</a>
+</h2>
+<p>在InnoDB中，往B+ tree中插入记录采用乐观插入和悲观插入两个阶段，首先采用乐观插入（btr_cur_optimistic_insert），如果发现此次插入操作会导致页的分裂，则对页进行一次整理，再尝试一次，如果还是不行，再采用悲观插入（btr_cur_pessimistic_insert）。</p>
+<h3 id="乐观插入">
+  乐观插入
+  <a class="anchor" href="#%e4%b9%90%e8%a7%82%e6%8f%92%e5%85%a5">#</a>
+</h3>
+<p>首先来看一下乐观插入的参数：</p>
+<pre><code>btr_cur_optimistic_insert(
+    ulint       flags,  0
+                        BTR_NO_UNDO_LOG_FLAG    不需要记undo log，比如回滚时不需要再次产生undo log
+                        BTR_NO_LOCKING_FLAG     表示插入后不需要对查询的记录加锁。比如对于change buffer，不会对其进行并发的读取，因此不需要进行锁保护
+                        BTR_KEEP_SYS_FLAG       不含有该bit时，更新记录的隐藏列rollback pointer。比如如果插入的是辅助索引或者非叶子节点，记录不含有隐藏列，需要设置该位
+                        BTR_KEEP_POS_FLAG       btr_cur_pessimistic_update() must keep cursor position when moving columns to big_rec
+                        BTR_CREATE_FLAG         the caller is creating the index or wants to bypass the index-&gt;info.online creation log
+                        BTR_KEEP_IBUF_BITMAP    the caller of btr_cur_optimistic_update() or btr_cur_update_in_place() will take care of updating IBUF_BITMAP_FREE
+    btr_cur_t*  cursor, cursor定位到insert point（即待插入记录的前一条记录），模式为PAGE_CUR_LE | BTR_INSERT
+    ulint**     offsets,插入后的物理记录的original offset
+    mem_heap_t** heap,
+    dtuple_t*   entry,  待插入的记录（逻辑记录）
+    rec_t**     rec,    插入后的记录（物理记录）
+    big_rec_t** big_rec,如果插入的是大记录，返回插入后的大记录（extern指向的big rec）
+    ulint       n_ext,  大记录中存储的列数
+    que_thr_t*  thr,    query thread
+    mtr_t*      mtr)
+</code></pre><p>乐观插入的执行流程如下：</p>
+<ol>
+<li>将待插入的记录（逻辑记录）转换为物理记录，计算页是否有足够的空间来容纳。这里需要注意的是，InnoDB要求插入操作保留1/32页的大小作为预留空间（fill factor）。其目的是降低update操作时页的分裂概率。</li>
+<li>如果插入的tuple需要转换为大记录格式，则首先将over-flow page的数据保存在big_rec中，待btr_cur_optimistic_insert返回DB_SUCCESS后，再向over-flow page插入big_rec。从这里可以看出，大记录的插入是分为两个阶段进行的。</li>
+<li>进行碎片整理后，再次尝试插入</li>
+<li>如果还没有足够的空间，则返回DB_FAIL</li>
+<li>检查锁的信息，并生成对应的undo日志（btr_cur_ins_lock_and_undo）。若锁检测到下一个记录已经被其他事务持有锁，则等待，返回DB_WAIT_LOCK。</li>
+<li>向页中插入记录（page_cur_tuple_insert）</li>
+<li>更新AHI</li>
+<li>不包含BTR_NO_LOCKING_FLAG，更新锁信息（lock_update_insert）</li>
+<li>最后若插入的对象是插入缓冲时（插入缓冲本身也是一棵B+树），更新对应插入缓冲位图页中的信息。</li>
+<li>函数执行完成后，会释放持有页的x-latch，如果还有行溢出数据（big_rec），则还要对index和leaf page加x-latch，再将溢出的列数据存放到over-flow page中（btr_store_big_rec_extern_fields）。</li>
+</ol>
+<h3 id="悲观插入">
+  悲观插入
+  <a class="anchor" href="#%e6%82%b2%e8%a7%82%e6%8f%92%e5%85%a5">#</a>
+</h3>
+<p>悲观插入的参数和乐观插入完全相同。</p>
+<p>但有以下几点不同：</p>
+<ul>
+<li>持有了index的x-latch，影响了B+ tree的并发</li>
+<li>为了避免死锁，除了持有page自身的x-latch外，还需要持有前后兄弟节点的x-latch</li>
+<li>确定悲观插入后，需要预留一些区的空间，以保证B+ tree的结构变化一定有足够的磁盘空间（3个区）可以保证这次操作完成。插入操作完成后会释放这部分预留空间。</li>
+<li>在InnoDB中，对于非叶子节点的插入都是悲观插入（btr_insert_on_non_leaf_level）</li>
+</ul>
+<p>悲观插入的执行流程如下：</p>
+<ol>
+<li>检查锁的信息，并生成对应的undo日志（btr_cur_ins_lock_and_undo）。若锁检测到下一个记录已经被其他事务持有锁，则函数返回DB_WAIT_LOCK。</li>
+<li>将待插入的记录（逻辑记录）转换为物理记录，然后可以计算页是否有足够的空间来容纳，如果没有，返回DB_FAIL。</li>
+<li>如果插入的tuple需要转换为大记录格式，则首先将over-flow page的数据保存在big_rec中，待btr_cur_optimistic_insert返回DB_SUCCESS后，再向over-flow page插入big_rec。</li>
+<li>经过之前的检查，这一步确保记录是一定能够插入页中的：
+root page插入（btr_root_raise_and_insert）
+非root page插入（btr_page_split_and_insert）</li>
+<li>更新AHI（btr_search_update_hash_on_insert）</li>
+<li>不包含BTR_NO_LOCKING_FLAG，更新锁信息（lock_update_insert）</li>
+<li>最后若插入的对象是插入缓冲时（插入缓冲本身也是一棵B+树），更新对应插入缓冲位图页中的信息。</li>
+<li>函数执行完成后，会释放持有页的x-latch，如果还有行溢出数据（big_rec），则还要对index和leaf page加x-latch，再将溢出的列数据存放到over-flow page中（btr_store_big_rec_extern_fields）。</li>
+</ol>
+<h2 id="更新记录">
+  更新记录
+  <a class="anchor" href="#%e6%9b%b4%e6%96%b0%e8%ae%b0%e5%bd%95">#</a>
+</h2>
+<p>和插入操作一样，更新分为非主键更新和主键更新两个场景。这是因为，node pointer在clustered index和secondary index所存储的key是不同的。</p>
+<h3 id="非主键更新">
+  非主键更新
+  <a class="anchor" href="#%e9%9d%9e%e4%b8%bb%e9%94%ae%e6%9b%b4%e6%96%b0">#</a>
+</h3>
+<p>非主键更新指的是对非PK进行update，比如非PK列，或者辅助索引列。</p>
+<p>非主键更新分为乐观和悲观两种。其中，乐观更新又分为原地更新（update in place）和普通的乐观更新。</p>
+<h4 id="原地更新">
+  原地更新
+  <a class="anchor" href="#%e5%8e%9f%e5%9c%b0%e6%9b%b4%e6%96%b0">#</a>
+</h4>
+<p>原地更新（row_upd_changes_field_size_or_external）是指更新记录中的各个列大小在更新过程中没有发生改变（注意，并不是记录的整体大小没有发生变化）。另外，含有extern属性的列不能原地更新。</p>
+<p>更新操作中变化列的新值保存在upd_t（update vector）中：</p>
+<pre><code>/* Update vector structure */
+struct upd_t{
+    mem_heap_t* heap;      
+    ulint       info_bits;  // info_bits
+    dtuple_t*   old_vrow;   /*!&lt; pointer to old row, used for virtual column update now */
+    ulint       n_fields;   // 新列的数量
+    upd_field_t*    fields; // 新列
+};
+ 
+/* Update vector field */
+struct upd_field_t{
+    unsigned    field_no:16;// 列号
+    dfield_t    new_val;    // 新值
+    dfield_t*   old_v_val;  /*!&lt; old value for the virtual column */
+};
+</code></pre><p>对于辅助索引来说，一般都不是原地更新，这是因为如果更新了辅助索引的列，一般都会引起索引的位置发生变化（&lsquo;AAA&rsquo; → &lsquo;BBB&rsquo;），只有一种情况比较特殊，即只有字符集发生改变，且排序规则没有改变，这时才会原地更新。</p>
+<p>change buffer tree也不能是原地更新。</p>
+<p>原地更新（btr_cur_update_in_place）的具体流程如下：</p>
+<ol>
+<li>如果是压缩页，检查是否有足够的空间（btr_cur_update_alloc_zip）</li>
+<li>检查lock，生成undo log</li>
+<li>更新系统列（trx ID + rollback pointer）</li>
+<li>更新AHI</li>
+<li>将update vector更新到物理记录中</li>
+<li>处理extern列（之前设置了delete mark，现在需要把extern列设为record owned）</li>
+<li>更新insert buffer</li>
+</ol>
+<h4 id="乐观更新">
+  乐观更新
+  <a class="anchor" href="#%e4%b9%90%e8%a7%82%e6%9b%b4%e6%96%b0">#</a>
+</h4>
+<p>普通的乐观更新就是delete mark+insert，具体流程如下图所示：</p>
+<p><img src="/InnoDB_b&#43;tree_btr_cur_optimistic_update.png" alt="InnoDB_b&#43;tree_btr_cur_optimistic_update" /></p>
+<p>其中，乐观更新（btr_cur_optimistic_update）的过程中仅需要持有记录所在页的x-latch。</p>
+<p>从上面的流程我们可以看出，乐观更新首先判断是否可以原地更新，如果不可以，再进行delete mark + insert。而在delete mark+insert中，因为记录还在同一个页中，并且主键并没有改变，只是新旧记录的heap no发生了变化，所以只需要更新锁信息即可（不需要创建锁）：将原来的锁信息移动到伪记录infimum上，待记录更新完成后再将伪记录上的锁移动到新记录上。记录的锁通过移动完成，不需要先删除后新建的方式来完成，提高了锁管理的效率。</p>
+<h4 id="悲观更新">
+  悲观更新
+  <a class="anchor" href="#%e6%82%b2%e8%a7%82%e6%9b%b4%e6%96%b0">#</a>
+</h4>
+<p>在悲观更新中，首先检查是否可以乐观更新，这是因为更新记录所在的page可能已经split，乐观更新有可能成功。</p>
+<p>对于锁信息的处理方式和乐观更新一样，即首先将更新记录的锁信息移动到伪记录infimum上，待更新完成后将锁信息移动回原记录上。但是，因为悲观更新会引起页的分裂操作，因此在某些情况下，需要对伪记录supremum锁进行修正。发生这种修正的条件为：</p>
+<ul>
+<li>更新的记录不是页中的第一个用户记录</li>
+<li>更新操作会引起页向右进行分裂</li>
+<li>分裂点记录就是更新记录</li>
+</ul>
+<p>那么这时分裂后原记录所在页的伪记录supremum会继承分裂点记录后的锁信息，并设置为gap类型。但是由于更新时记录本身已经有锁，因此伪记录supremum需要继承的是更新的记录，也就是分裂点记录锁的信息，而在分裂时，其锁信息被移动到了伪记录infimum上。</p>
+<h3 id="主键更新">
+  主键更新
+  <a class="anchor" href="#%e4%b8%bb%e9%94%ae%e6%9b%b4%e6%96%b0">#</a>
+</h3>
+<p>在真正的生产环境中，应该尽量避免更新主键。</p>
+<p>主键更新的流程：</p>
+<ul>
+<li>原主键记录 delete mark</li>
+<li>insert新主键记录</li>
+<li>purge线程判断是否有其他事务引用已删除的主键记录，如果没有，则彻底删除</li>
+</ul>
+<p>这里我们对第2步中的extern列进行详细说明：extern列会把大部分数据存放在over-flow page中。如果更新不涉及extern列，那么新插入的主键记录需要继承（inherit）over-flow page的数据。同样，在purge线程清理已删除的主键记录时，如果其不拥有（owned）over-flow page，则不删除over-flow page。类似的，如果回滚时被删除的记录列继承over-flow page，那么同样不能删除over-flow page。继承和拥有通过extern列上的BTR_EXTERN_OWNER_FLAG和BTR_EXTERN_INHERITED_FLAG进行标记：BTR_EXTERN_OWNER_FLAG为0表示记录拥有该over-flow page，purge线程可以进行删除。回滚时，如果BTR_EXTERN_INHERITED_FLAG为1，则不能删除over-flow page。</p>
+<h2 id="删除记录">
+  删除记录
+  <a class="anchor" href="#%e5%88%a0%e9%99%a4%e8%ae%b0%e5%bd%95">#</a>
+</h2>
+<p>因为InnoDB支持MVCC，所以对于删除操作，分为2个步骤：</p>
+<ol>
+<li>delete mark</li>
+<li>purge</li>
+</ol>
+<p>其中，步骤#1在用户线程（事务）中完成；步骤#2通过后台的purge线程完成，purge线程检查是否还有其他事务还在使用该记录，如果没有，则将记录彻底删除，记录所占用的空间放回到page的PAGE_FREE链表。</p>
+<h3 id="delete-mark">
+  delete mark
+  <a class="anchor" href="#delete-mark">#</a>
+</h3>
+<p>其中，根据删除对象分为clustered index和secondary index：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">clustered index的delete markbtr_cur_del_mark_set_clust_rec</th>
+<th style="text-align:left">secondary index的delete markbtr_cur_del_mark_set_sec_rec</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">1. 加锁（lock_clust_rec_modify_check_and_lock），<!-- raw HTML omitted -->可能存在的隐式锁转化为显式锁<!-- raw HTML omitted -->，加显示锁（LOCK_X | LOCK_REC_NOT_GAP） <!-- raw HTML omitted -->2. <!-- raw HTML omitted -->生成undo log<!-- raw HTML omitted --><!-- raw HTML omitted -->3. delete mark<!-- raw HTML omitted -->4. <!-- raw HTML omitted -->更新系统列<!-- raw HTML omitted --><!-- raw HTML omitted -->5. 生成redo log</td>
+<td style="text-align:left">1. 加锁（btr_cur_del_mark_set_sec_rec），加显示锁（LOCK_X | LOCK_REC_NOT_GAP） <!-- raw HTML omitted -->2. delete mark<!-- raw HTML omitted -->3. 生成redo log</td>
+</tr>
+</tbody>
+</table>
+<p>从上面可以看出来，两种索引的delete mark区别主要有两点：锁转换和支持数据访问的MVCC。</p>
+<p>产生的redo log如下：</p>
+<p><img src="/InnoDB_b&#43;tree_index_delete_mark_mtr_log.png" alt="InnoDB_b&#43;tree_index_delete_mark_mtr_log" /></p>
+<h3 id="purge-deleted-index-record">
+  purge deleted index record
+  <a class="anchor" href="#purge-deleted-index-record">#</a>
+</h3>
+<p>purge线程对delete mark记录进行gc，具体的策略是：先删除辅助索引，再删除聚簇索引中的deleted index record，调用链如下：</p>
+<pre><code>row_purge
+    row_purge_record
+        row_purge_del_mark
+            row_purge_remove_sec_if_poss            // 删除辅助索引中的deleted index record
+                row_purge_remove_sec_if_poss_leaf   // 只删除index record
+                    btr_cur_optimistic_delete       // 乐观删除
+                row_purge_remove_sec_if_poss_tree   // 需要修改index tree
+                    btr_cur_pessimistic_delete      // 悲观删除
+            row_purge_remove_clust_if_poss          // 删除聚簇索引中的deleted index record
+                row_purge_remove_clust_if_poss_low
+                    BTR_MODIFY_LEAF：
+                        btr_cur_optimistic_delete   // 乐观删除
+                    BTR_MODIFY_TREE | BTR_LATCH_FOR_DELETE：
+                        btr_cur_pessimistic_delete  // 悲观删除
+</code></pre><p>从上面的调用我们可以得知：</p>
+<p>如果是叶子节点（BTR_MODIFY_LEAF），则采用乐观删除（btr_cur_optimistic_delete），仅对记录所在的页加x-latch，调用page_cur_delete_rec，并且有如下前提：</p>
+<ul>
+<li>删除的记录不包含extern属性的列</li>
+<li>删除操作不会引起页发生合并操作</li>
+</ul>
+<p>否则（BTR_MODIFY_TREE | BTR_LATCH_FOR_DELETE）采用悲观删除（btr_cur_pessimistic_delete），不仅对记录所在的页加x-latch，还对其兄弟节点和index持有x-latch。</p>
+<p>悲观删除具体还需要区分该记录的位置：位于叶子节点还是非叶子节点，删除叶子节点中的记录，不需要更新上层叶子的键值，这样的设计可以减少对于上层节点更新的开销，如下图所示：</p>
+<p><img src="/InnoDB_b&#43;tree_btr_delete_leaf_node.png" alt="InnoDB_b&#43;tree_btr_delete_leaf_node" /></p>
+<p>从上面的图中可以看到，删除leaf node上的记录25，不需要更新上层的node pointer，因为这并没有破坏查询得到的结果。</p>
+<p>而删除非叶子节点记录，则需要根据该记录的不同情况进行不同的处理：</p>
+<ul>
+<li>删除的非叶子节点记录含有REC_INFO_MIN_REC_FLAG标识，并且记录所在page   是B+ tree当前层的第一个page，删除记录，并对下一个记录设置REC_INFO_MIN_REC_FLAG标识</li>
+<li>删除的非叶子节点记录含有REC_INFO_MIN_REC_FLAG标识，并且记录所在page不是B+ tree当前层的第一个page，删除记录，并更新上一层的node pointer</li>
+<li>直接删除记录</li>
+</ul>
+<p>具体示例如下图所示：</p>
+<p><img src="/InnoDB_b&#43;tree_btr_delete_branch_node.png" alt="InnoDB_b&#43;tree_btr_delete_branch_node" /></p>
+<blockquote class="book-hint danger">
+  留给读者一个小问题，InnoDB是如何保证B+ tree中叶子节点不会出现latch死锁？
+</blockquote>
+
+<h1 id="自适应哈希索引转">
+  自适应哈希索引（转）
+  <a class="anchor" href="#%e8%87%aa%e9%80%82%e5%ba%94%e5%93%88%e5%b8%8c%e7%b4%a2%e5%bc%95%e8%bd%ac">#</a>
+</h1>
+<p>本节AHI转自阿里内核月报</p>
+<p>自适应哈希索引，简称AHI（Adaptive Hash Index），目的是为了可以使InnoDB在有足够的内存和特定的工作负载下，看起来更像一个内存数据库，并且不会牺牲任何事务特征和稳定性，即对热数据的访问提供加速，也可以称之为一种特定的page table。</p>
+<p>我们从前面可以看到，InnoDB是基于索引组织表来构建数据的，因此查询都是基于B+ tree来进行的，而B+ tree的查询效率和树的高度成正比，tree的高度代表了I/O次数。而如果采用哈希查询，则复杂度为O(1)。InnoDB通过观察B+ tree的搜索模式，在特定条件下使用index key的前缀（前缀长度任意）自动建立哈希索引。</p>
+<p>被称为”自适应“的原因，一是其根据观察搜索模式自动建立索引的机制，二是在访问时首先查询哈希索引，对用户是透明的。从某种意义上来说，AHI可以理解为建立在B+ tree索引上的索引。</p>
+<p>另外，在某些场景下，AHI并不适用，比如高并发的join操作，模糊或者范围查询。在这种场景下，维护AHI的成本比其带来的收益更大，所以需要根据具体的访问方式来决定是否开启AHI。</p>
+<p>AHI和B+ tree索引的区别如下：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left"></th>
+<th style="text-align:left">B+ tree索引</th>
+<th style="text-align:left">AHI</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">查询时间复杂度</td>
+<td style="text-align:left">O(logd(N))</td>
+<td style="text-align:left">O(1)</td>
+</tr>
+<tr>
+<td style="text-align:left">是否持久化</td>
+<td style="text-align:left">是（并通过日志保证完整性）</td>
+<td style="text-align:left">否（仅在内存中）</td>
+</tr>
+<tr>
+<td style="text-align:left">索引对象</td>
+<td style="text-align:left">页</td>
+<td style="text-align:left">记录</td>
+</tr>
+</tbody>
+</table>
+<p>InnoDB在进行B+ tree查询搜索时，为了减少了重新寻路的次数，采用多种策略来提高性能：</p>
+<ol>
+<li>对于连续记录扫描，InnoDB在满足比较严格的条件时采用row cache的方式连续读取8条记录（并将记录格式转换成Server层的MySQL Format），存储在用户线程私有的row_prebuilt_t::fetch_cache中。这样一次寻路就可以获取多条记录，在server层处理完一条记录后，可以直接从cache中取数据而无需再次寻路，直到cache中数据取完，再进行下一轮。</li>
+<li>另一种方式是，当一次进入InnoDB层获得数据后，在返回server层前，当前的btr cursor会暂存到持久游标（row_prebuilt_t::pcur）中，当再次返回InnoDB层捞数据时，如果对应的block没有发生任何修改，则可以继续沿用之前存储的cursor，无需重新定位。</li>
+<li>通过观察记录的搜索模式，创建AHI，其后的查询可以直接定位记录。</li>
+</ol>
+<h2 id="创建ahi">
+  创建AHI
+  <a class="anchor" href="#%e5%88%9b%e5%bb%baahi">#</a>
+</h2>
+<p>AHI就是一个哈希表（btr_search_sys::hash_tables），在InnoDB的buffer pool初始化过程中创建，大小为buffer pool的1/64。</p>
+<p>从这里可以看出：</p>
+<ul>
+<li>AHI占用buffer pool的空间</li>
+<li>在MySQL 5.7.8之前，AHI使用btr_search_latch latch来控制并发访问，在高负载的情况下这可能会成为性能的瓶颈点。于是，在MySQL 5.7.8中，将AHI分为多个partition（默认为8），每个partition有自己的latch来控制并发访问（btr_search_latches），来降低latch的争用。</li>
+<li>MySQL从5.7.5可以运行时调整buffer pool size，当buffer_pool动态调整的大小超过一定程度时（扩大2倍或者缩小2倍以上），重新分配AHI（btr_search_sys_resize()）</li>
+</ul>
+<blockquote class="book-hint info">
+  <p>可以通过观察show engine innodb status中的SEMAPHORES使用情况来判断latch的争用情况，比如看到大量线程在btr0sea.cc上争用latch，这种情况下，可能需要考虑关闭AHI</p>
+<p>Percona有一篇文章讲AHI的btr_search_latch和index lock的性能问题：<a href="https://www.percona.com/blog/2010/02/25/index-lock-and-adaptive-search-next-two-biggest-innodb-problems/">Index lock and adaptive search – next two biggest InnoDB problems</a>，MySQL 5.7通过对AHI拆分为多个partition（commit id: <a href="https://github.com/mysql/mysql-server/commit/ab17ab91ce18a47bb6c5c49e4dc0505ad488a448">ab17ab91</a>）以及引入更细粒度的索引锁协议（<a href="https://dev.mysql.com/worklog/task/?id=6326">WL#6326 fix index→lock contention</a>）来解决这两个问题</p>
+
+</blockquote>
+
+<p>函数调用链如下：</p>
+<pre><code>innobase_init()
+    innobase_start_or_create_for_mysql()
+        buf_pool_init(srv_buf_pool_size, srv_buf_pool_instances)                    // 2147483648(2G) 8
+            btr_search_sys_create(buf_pool_get_curr_size() / sizeof(void*) / 64)    // 2147221504/8/64=4193792
+                ib_create((hash_size / btr_ahi_parts, ...)                          // 4193792/8=524224
+                     hash_create(n);                                                // 524224 -&gt; 553193
+</code></pre><p>数据结构如下：</p>
+<p><img src="/InnoDB_b&#43;tree_AHI_btr_search_sys.png" alt="InnoDB_b&#43;tree_AHI_btr_search_sys" /></p>
+<h2 id="维护ahi的查询信息">
+  维护AHI的查询信息
+  <a class="anchor" href="#%e7%bb%b4%e6%8a%a4ahi%e7%9a%84%e6%9f%a5%e8%af%a2%e4%bf%a1%e6%81%af">#</a>
+</h2>
+<p>在每个索引对象上（dict_index_t-&gt;search_info），维护了记录的查询信息（btr_search_t），用来启发当前索引对AHI的使用。</p>
+<p>当索引对象添加到数据字典缓存时，创建该索引的查询信息。随后，搜索从B+ tree的root page开始，定位到leaf page时，更新查询信息（btr_search_info_update）。代码如下：</p>
+<p>btr_cur_search_to_nth_level</p>
+<pre><code>level == 0
+#ifdef BTR_CUR_ADAPT
+        /* We do a dirty read of btr_search_enabled here.  We
+        will properly check btr_search_enabled again in
+        btr_search_build_page_hash_index() before building a
+        page hash index, while holding search latch. */
+        if (btr_search_enabled &amp;&amp; !index-&gt;disable_ahi) {
+            btr_search_info_update(index, cursor);
+        }
+#endif
+</code></pre><p>当info-&gt;hash_analysis值超过BTR_SEARCH_HASH_ANALYSIS（17）时，也就是说对该索引寻路到叶子节点17次后，才会去做AHI分析，这是为了避免频繁的索引查询分析产生的过多CPU开销。</p>
+<p>InnoDB通过索引条件构建一个可用于查询的tuple，而AHI需要根据tuple定位到叶子节点上记录的位置，既然AHI是建立在B+树索引上的索引，其的键值就是通过B+树索引的前N列的值计算得来的，所有的查询信息（search info）统计都是为了确定一个合适的&quot;Ｎ&quot; ，这个值是动态的，会跟随应用的负载（查询模式）自适应调整并触发block上的AHI rebuild。</p>
+<p>维护AHI的查询信息（btr_search_info_update_slow）分为三部分，我们依次进行介绍：</p>
+<ol>
+<li>更新index的查询信息（index search info）</li>
+<li>更新block的查询信息（block search info）</li>
+<li>build AHI</li>
+</ol>
+<h3 id="更新索引的查询信息">
+  更新索引的查询信息
+  <a class="anchor" href="#%e6%9b%b4%e6%96%b0%e7%b4%a2%e5%bc%95%e7%9a%84%e6%9f%a5%e8%af%a2%e4%bf%a1%e6%81%af">#</a>
+</h3>
+<p>通过之前的介绍我们知道，查询首先将结果保存在btr cursor中，其中，通过二叉查找比较得到的匹配结果放在变量up_match、up_bytes、low_match、low_bytes中。AHI根据这4个变量来更新索引的查询信息（btr_search_info_update_hash），即更新search info的left_side、n_fields、n_bytes。其中left_size表示在相同索引前缀时采用最左/最右记录构建AHI，n_fields表示推荐的AHI列数，n_bytes为索引中的字符串前缀大小。这样，通过left_size+n_fields就可以确定选择哪些列来作为索引前缀构建AHI的哈希记录（fold, rec）。当用户的SQL的索引前缀列的个数大于等于构建AHI时的前缀索引，就可以用上AHI。</p>
+<p>两种情况需要build建议的前缀索引列（set a new recommendation）：</p>
+<ul>
+<li>当前是第一次为该索引做AHI分析，btr_search_t::n_hash_potential = 0，需要构建建议的前缀索引列</li>
+<li>新的记录匹配模式发生了变化(info-&gt;left_side == (info-&gt;n_fields &lt;=cursor-&gt;low_match))，需要重新设置前缀索引列</li>
+</ul>
+<p>代码如下：</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">cmp = ut_pair_cmp(cursor-&gt;up_match, cursor-&gt;up_bytes,
+          cursor-&gt;low_match, cursor-&gt;low_bytes);
+<span style="color:#f00">if</span> (cmp == <span style="color:#f60">0</span>) {
+    info-&gt;n_hash_potential = <span style="color:#f60">0</span>;
+ 
+    <span style="color:#0f0">/* For extra safety, we set some sensible values here */</span>
+ 
+    info-&gt;n_fields = <span style="color:#f60">1</span>;
+    info-&gt;n_bytes = <span style="color:#f60">0</span>;
+ 
+    info-&gt;left_side = TRUE;
+ 
+} <span style="color:#f00">else</span> <span style="color:#ff0">if</span> (cmp &gt; <span style="color:#f60">0</span>) {
+    info-&gt;n_hash_potential = <span style="color:#f60">1</span>;
+ 
+    <span style="color:#f00">if</span> (cursor-&gt;up_match &gt;= n_unique) {
+ 
+        info-&gt;n_fields = n_unique;
+        info-&gt;n_bytes = <span style="color:#f60">0</span>;
+ 
+    } <span style="color:#f00">else</span> <span style="color:#f00">if</span> (cursor-&gt;low_match &lt; cursor-&gt;up_match) {
+ 
+        info-&gt;n_fields = cursor-&gt;low_match + <span style="color:#f60">1</span>;
+        info-&gt;n_bytes = <span style="color:#f60">0</span>;
+    } <span style="color:#f00">else</span> {
+        info-&gt;n_fields = cursor-&gt;low_match;
+        info-&gt;n_bytes = cursor-&gt;low_bytes + <span style="color:#f60">1</span>;
+    }
+ 
+    info-&gt;left_side = TRUE;
+} <span style="color:#f00">else</span> {
+    info-&gt;n_hash_potential = <span style="color:#f60">1</span>;
+ 
+    <span style="color:#f00">if</span> (cursor-&gt;low_match &gt;= n_unique) {
+ 
+        info-&gt;n_fields = n_unique;
+        info-&gt;n_bytes = <span style="color:#f60">0</span>;
+    } <span style="color:#f00">else</span> <span style="color:#ff0">if</span> (cursor-&gt;low_match &gt; cursor-&gt;up_match) {
+ 
+        info-&gt;n_fields = cursor-&gt;up_match + <span style="color:#f60">1</span>;
+        info-&gt;n_bytes = <span style="color:#f60">0</span>;
+    } <span style="color:#f00">else</span> {
+        info-&gt;n_fields = cursor-&gt;up_match;
+        info-&gt;n_bytes = cursor-&gt;up_bytes + <span style="color:#f60">1</span>;
+    }
+ 
+    info-&gt;left_side = FALSE;
+}
+</code></pre></div><p>从上述代码可以看到，在low_match和up_match之间，选择小一点match的索引列数的来进行设置，但不超过唯一确定索引记录值的列的个数：</p>
+<ol>
+<li>当low_match小于up_match时，left_side设置为true，表示相同前缀索引的记录只缓存最左记录</li>
+<li>当low_match大于up_match时，left_side设置为false，表示相同前缀索引的记录只缓存最右记录</li>
+</ol>
+<p>另外，如果不是第一次进入，有两种情况需要递增n_hash_potential（如果使用AHI构建索引，潜在的可能成功的次数）：</p>
+<ul>
+<li>
+<p>本次查询的up_match和当前推荐的前缀索引n_fields都能唯一决定一条索引记录（比如unique index），则根据search_info推荐的前缀索引列构建AHI肯定能命中</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">    <span style="color:#0f0">/* Test if the search would have succeeded using the recommended
+</span><span style="color:#0f0">    hash prefix */</span>
+   
+    <span style="color:#f00">if</span> (info-&gt;n_fields &gt;= n_unique &amp;&amp; cursor-&gt;up_match &gt;= n_unique) {
+increment_potential:
+        info-&gt;n_hash_potential++;
+   
+        <span style="color:#f00">return</span>;
+    }
+</code></pre></div></li>
+<li>
+<p>本次查询的tuple可以通过建议的前缀索引列构建的AHI定位到</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">cmp = ut_pair_cmp(info-&gt;n_fields, info-&gt;n_bytes,
+          cursor-&gt;up_match, cursor-&gt;up_bytes);
+   
+<span style="color:#f00">if</span> (info-&gt;left_side ? cmp &lt;= <span style="color:#f60">0</span> : cmp &gt; <span style="color:#f60">0</span>) {
+    <span style="color:#f00">goto</span> increment_potential;
+}
+</code></pre></div></li>
+</ul>
+<p>从上面我们可以得知，AHI对于同一个索引使用相同的查询模式进行查询的场景，收益最大。</p>
+<h3 id="更新block的查询信息">
+  更新block的查询信息
+  <a class="anchor" href="#%e6%9b%b4%e6%96%b0block%e7%9a%84%e6%9f%a5%e8%af%a2%e4%bf%a1%e6%81%af">#</a>
+</h3>
+<p>我们更新完index的查询信息后，接着需要更新数据页block的查询信息（btr_search_update_block_hash_info）。</p>
+<p>需要更新的查询信息有：</p>
+<ul>
+<li>btr_search_info::last_hash_succ：是否最近一次通过AHI查找成功</li>
+<li>buf_block_t::n_hash_helps：如果使用当前推荐的前缀索引列构建AHI，可能命中的次数</li>
+<li>buf_block_t::left_size：同index search info</li>
+<li>buf_block_t::n_fields ：同index search info</li>
+<li>buf_block_t::n_fields ：同index search info</li>
+</ul>
+<p>处理流程：</p>
+<ol>
+<li>首先将btr_search_info::last_hash_succ设为false。这意味着每次分析一个新的block，都会导致AHI短暂不可用。</li>
+<li>比较index search info和block search info的三元组，计算n_hash_helps</li>
+<li>判断是否为整个page构建AHI</li>
+</ol>
+<p>这里展开说一下#3，即当满足下面3个条件时，就会为整个page构建AHI：</p>
+<ul>
+<li>block可能命中的次数（n_hash_helps）大于page总记录数的1/16</li>
+<li>index（连续）潜在的可能成功的次数（n_hash_potential）大于100</li>
+<li>还没有为当前block构造过索引（!block-&gt;index），或者当前block上已经构建了AHI索引并且其可能命中的次数（n_hash_helps）大于page总记录数的2倍，或者当前block上推荐的前缀索引列和当前已构建的AHI索引发生了变化。</li>
+</ul>
+<h3 id="build-ahi">
+  build AHI
+  <a class="anchor" href="#build-ahi">#</a>
+</h3>
+<p>如果在上一步中判断可以为当前的page构建AHI（build_index = TRUE），则根据当前推荐的索引前缀build AHI。</p>
+<p>build分为3个阶段：</p>
+<ol>
+<li>检查阶段：检查是否已开启AHI，加btr_search_latch s-latch，如果block上已经构建了AHI（block-&gt;index）但是和当前推荐的不同，则清空block的AHI对应项（btr_search_drop_page_hash_index），释放btr_search_latch s-latch</li>
+<li>搜集阶段：根据推荐的索引列计算记录的fold值，将page中对应记录的内存地址放入（fold, rec*）数组中
+left_side不同，相同的前缀索引列值不一样，比如page上记录为 (2, 1), (2, 2), (5, 3), (5, 4), (7, 5), (8, 6)，n_fields＝１
+如果left_side = true （最左），则hash存储的记录为(2, 1),  (5, 3), (7, 5), (8, 6)
+如果left_side = false（最右），则hash存储的记录为(2, 2), (5, 4), (7, 5), (8, 6)</li>
+<li>插入阶段：加btr_search_latch x-latch，将搜集到的（fold, rec*）插入到AHI中</li>
+</ol>
+<h3 id="index-search-info">
+  index search info
+  <a class="anchor" href="#index-search-info">#</a>
+</h3>
+<p>我们整体看一下index search info：</p>
+<pre><code>/** The search info struct in an index */
+struct btr_search_t{
+    ulint   ref_count;          // AHI中的block数（即block-&gt;index的个数）
+ 
+    buf_block_t* root_guess;    /*!&lt; the root page frame when it was last time fetched, or NULL */
+    ulint   withdraw_clock;     /*!&lt; the withdraw clock value of the buffer pool when root_guess was stored */
+    ulint   hash_analysis;      // 在B+树索引中进入leaf page的次数，超过BTR_SEARCH_HASH_ANALYSIS（17），则更新index search info
+    ibool   last_hash_succ;     // 是否最近一次通过AHI查找成功（该值不一定准确）
+    ulint   n_hash_potential;   // 如果使用AHI构建索引，潜在的可能成功的次数
+ 
+    ulint   n_fields;           // 推荐的AHI列数
+    ulint   n_bytes;            // 索引中的字符串前缀大小
+    ibool   left_side;          // 在相同索引前缀时采用最左/最右记录构建AHI
+ 
+    ulint   n_hash_succ;        // AHI查询命中的次数
+    ulint   n_hash_fail;        // AHI查询miss的次数
+    ulint   n_patt_succ;        // 未使用
+    ulint   n_searches;         // B+树的查询次数
+};
+</code></pre><h2 id="使用ahi">
+  使用AHI
+  <a class="anchor" href="#%e4%bd%bf%e7%94%a8ahi">#</a>
+</h2>
+<p>在B+ tree搜索中（btr_cur_search_to_nth_level）使用AHI，代码如下：</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#e5e5e5">#ifndef BTR_CUR_ADAPT
+</span><span style="color:#e5e5e5"></span>    guess = NULL;
+<span style="color:#e5e5e5">#else
+</span><span style="color:#e5e5e5"></span>    info = btr_search_get_info(index);
+ 
+    <span style="color:#f00">if</span> (!buf_pool_is_obsolete(info-&gt;withdraw_clock)) {
+        guess = info-&gt;root_guess;
+    } <span style="color:#f00">else</span> {
+        guess = NULL;
+    }
+ 
+<span style="color:#e5e5e5">#ifdef BTR_CUR_HASH_ADAPT
+</span><span style="color:#e5e5e5"></span> 
+<span style="color:#e5e5e5"># ifdef UNIV_SEARCH_PERF_STAT
+</span><span style="color:#e5e5e5"></span>    info-&gt;n_searches++;
+<span style="color:#e5e5e5"># endif
+</span><span style="color:#e5e5e5"></span>    <span style="color:#0f0">/* Use of AHI is disabled for intrinsic table as these tables re-use
+</span><span style="color:#0f0">    the index-id and AHI validation is based on index-id. */</span>
+    <span style="color:#f00">if</span> (rw_lock_get_writer(btr_get_search_latch(index))
+        == RW_LOCK_NOT_LOCKED
+        &amp;&amp; latch_mode &lt;= BTR_MODIFY_LEAF
+        &amp;&amp; info-&gt;last_hash_succ
+        &amp;&amp; !index-&gt;disable_ahi
+        &amp;&amp; !estimate
+<span style="color:#e5e5e5"># ifdef PAGE_CUR_LE_OR_EXTENDS
+</span><span style="color:#e5e5e5"></span>        &amp;&amp; mode != PAGE_CUR_LE_OR_EXTENDS
+<span style="color:#e5e5e5"># endif </span><span style="color:#0f0">/* PAGE_CUR_LE_OR_EXTENDS */</span><span style="color:#e5e5e5">
+</span><span style="color:#e5e5e5"></span>        &amp;&amp; !dict_index_is_spatial(index)
+        <span style="color:#0f0">/* If !has_search_latch, we do a dirty read of
+</span><span style="color:#0f0">        btr_search_enabled below, and btr_search_guess_on_hash()
+</span><span style="color:#0f0">        will have to check it again. */</span>
+        &amp;&amp; UNIV_LIKELY(btr_search_enabled)
+        &amp;&amp; !modify_external
+        &amp;&amp; btr_search_guess_on_hash(index, info, tuple, mode,
+                    latch_mode, cursor,
+                    has_search_latch, mtr)) {
+        btr_cur_n_sea++;
+ 
+        DBUG_VOID_RETURN;
+    }
+<span style="color:#e5e5e5"># endif </span><span style="color:#0f0">/* BTR_CUR_HASH_ADAPT */</span><span style="color:#e5e5e5">
+</span><span style="color:#e5e5e5">#endif </span><span style="color:#0f0">/* BTR_CUR_ADAPT */</span><span style="color:#e5e5e5">
+</span></code></pre></div><p>我们从中可以看到，需要满足如下条件才能够使用AHI：</p>
+<ul>
+<li>没有加btr_search_latch写锁。如果加了写锁，可能操作时间比较耗时，走AHI检索记录得不偿失</li>
+<li>本次查询或者DML不改变B+树的结构（latch_mode &lt;= BTR_MODIFY_LEAF）</li>
+<li>最近一次使用AHI（可能）成功（info→last_hash_succ）</li>
+<li>已开启AHI</li>
+<li>查询优化阶段的估值操作，例如计算range范围等，典型的堆栈包括：handler::multi_range_read_info_const　–&gt; ha_innobase::records_in_range –&gt; btr_estimate_n_rows_in_range –&gt; btr_cur_search_to_nth_level</li>
+<li>不是空间索引</li>
+<li>调用者无需分配外部存储页(BTR_MODIFY_EXTERNAL，主要用于辅助写入大的blob数据，参考struct btr_blob_log_check_t)。</li>
+</ul>
+<p>当满足上述所有条件时，才根据当前的查询tuple对象计算fold，并查询AHI（btr_search_guess_on_hash）；只有当前检索使用的tuple列的个数大于等于构建AHI的列的个数时，才能够使用AHI索引。</p>
+<p><strong>btr_search_guess_on_hash</strong></p>
+<ul>
+<li>首先用户提供的前缀索引查询条件必须大于等于构建AHI时的前缀索引列数，这里存在一种可能性：索引上的search_info的n_fields 和block上构建AHI时的cur_n_fields值已经不相同了，但是我们并不知道本次查询到底落在哪个block上，这里一致以search_info上的n_fields为准来计算fold，去查询AHI</li>
+<li>在检索AHI时需要加&amp;btr_search_latch的S锁</li>
+<li>如果本次无法命中AHI，就会将btr_search_info::last_hash_succ设置为false，这意味着随后的查询都不会去使用AHI了，只能等待下一路查询信息分析后才可能再次启动（btr_search_failure）</li>
+<li>对于从ahi中获得的记录指针，还需要根据当前的查询模式检查是否是正确的记录位置（btr_search_check_guess）</li>
+</ul>
+<p>如果本次查询使用了AHI，但查询失败了（cursor-&gt;flag == BTR_CUR_HASH_FAIL），并且当前block构建AHI索引的curr_n_fields等字段和btr_search_info上的相符合，则根据当前cursor定位到的记录插入AHI。参考函数：btr_search_update_hash_ref。</p>
+<p>从上述分析可见，AHI如其名，完全是自适应的，如果检索模式不固定，很容易就出现无法用上AHI或者AHI失效的情况。</p>
+<h2 id="shortcut查询模式">
+  shortcut查询模式
+  <a class="anchor" href="#shortcut%e6%9f%a5%e8%af%a2%e6%a8%a1%e5%bc%8f">#</a>
+</h2>
+<p>在row_search_mvcc函数中，首先会去判断在满足一定条件时，使用shortcut模式，利用AHI索引来进行检索。</p>
+<p>只有满足严苛的条件时（例如需要唯一键查询、使用聚集索引、长度不超过八分之一的page size、隔离级别在RC及RC之上、活跃的Read view等等条件，具体的参阅代码），才能使用shortcut：</p>
+<ul>
+<li>加btr_search_latch的S锁</li>
+<li>通过row_sel_try_search_shortcut_for_mysql检索记录；如果找到满足条件的记录，本次查询可以不释放 btr_search_latch，这意味着InnoDB/server层交互期间可能持有AHI锁，但最多在10000次（BTR_SEA_TIMEOUT）交互后释放AHI latch。一旦发现有别的线程在等待AHI X 锁，也会主动释放其拥有的S锁。</li>
+</ul>
+<p>然而， Percona的开发Alexey Kopytov认为这种长时间拥有的btr_search_latch的方式是没有必要的，这种设计方式出现在很久之前加锁、解锁非常昂贵的时代，然而现在的CPU已经很先进了，完全没有必要，在Percona的版本中，一次shortcut的查询操作后都直接释放掉btr_search_latch（参阅<a href="https://bugs.launchpad.net/percona-server/&#43;bug/1218347">bug#1218347</a>）。</p>
+<h2 id="ahi运维和监控项">
+  AHI运维和监控项
+  <a class="anchor" href="#ahi%e8%bf%90%e7%bb%b4%e5%92%8c%e7%9b%91%e6%8e%a7%e9%a1%b9">#</a>
+</h2>
+<h3 id="ahi参数">
+  AHI参数
+  <a class="anchor" href="#ahi%e5%8f%82%e6%95%b0">#</a>
+</h3>
+<p>InnoDB提供了如下AHI参数</p>
+<p><a href="https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_adaptive_hash_index">innodb_adaptive_hash_index</a>：开启/关闭AHI
+<a href="https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_adaptive_hash_index_parts">innodb_adaptive_hash_index_parts</a>：AHI分区数</p>
+<h3 id="ahi监控项">
+  AHI监控项
+  <a class="anchor" href="#ahi%e7%9b%91%e6%8e%a7%e9%a1%b9">#</a>
+</h3>
+<p>打开AHI监控项</p>
+<pre><code>set global innodb_monitor_enable = module_adaptive_hash;
+</code></pre><p>查看AHI的运行状态</p>
+<p><strong>通过show engine innodb status查看AHI各个partition的使用情况</strong></p>
+<pre><code>-------------------------------------
+INSERT BUFFER AND ADAPTIVE HASH INDEX
+-------------------------------------
+...
+Hash table size 553193, node heap has 108 buffer(s)
+Hash table size 553193, node heap has 122 buffer(s)
+Hash table size 553193, node heap has 121 buffer(s)
+Hash table size 553193, node heap has 159 buffer(s)
+Hash table size 553193, node heap has 154 buffer(s)
+Hash table size 553193, node heap has 118 buffer(s)
+Hash table size 553193, node heap has 154 buffer(s)
+Hash table size 553193, node heap has 89 buffer(s)
+0.00 hash searches/s, 0.00 non-hash searches/s
+</code></pre><p><strong>通过INFORMATION_SCHEMA.INNODB_METRICS查看运行时信息</strong></p>
+<pre><code>mysql&gt; select status, name, subsystem,count, max_count, min_count, avg_count, time_enabled, time_disabled from INFORMATION_SCHEMA.INNODB_METRICS where subsystem like '%adaptive_hash%';
++----------+------------------------------------------+---------------------+----------+-----------+-----------+-------------------+---------------------+---------------+
+| status   | name                                     | subsystem           | count    | max_count | min_count | avg_count         | time_enabled        | time_disabled |
++----------+------------------------------------------+---------------------+----------+-----------+-----------+-------------------+---------------------+---------------+
+| enabled  | adaptive_hash_searches                   | adaptive_hash_index |  8038491 |   8038491 |      NULL |  1.22195712800762 | 2019-03-27 11:42:05 | NULL          |
+| enabled  | adaptive_hash_searches_btree             | adaptive_hash_index | 58550686 |  58550686 |      NULL | 8.900479966630051 | 2019-03-27 11:42:05 | NULL          |
+| disabled | adaptive_hash_pages_added                | adaptive_hash_index |        0 |      NULL |      NULL |              NULL | NULL                | NULL          |
+| disabled | adaptive_hash_pages_removed              | adaptive_hash_index |        0 |      NULL |      NULL |              NULL | NULL                | NULL          |
+| disabled | adaptive_hash_rows_added                 | adaptive_hash_index |        0 |      NULL |      NULL |              NULL | NULL                | NULL          |
+| disabled | adaptive_hash_rows_removed               | adaptive_hash_index |        0 |      NULL |      NULL |              NULL | NULL                | NULL          |
+| disabled | adaptive_hash_rows_deleted_no_hash_entry | adaptive_hash_index |        0 |      NULL |      NULL |              NULL | NULL                | NULL          |
+| disabled | adaptive_hash_rows_updated               | adaptive_hash_index |        0 |      NULL |      NULL |              NULL | NULL                | NULL          |
++----------+------------------------------------------+---------------------+----------+-----------+-----------+-------------------+---------------------+---------------+
+8 rows in set (0.00 sec)
+</code></pre></article>
  
       
 
@@ -1015,6 +1902,63 @@ page 7
         </li>
         <li><a href="#页的合并">页的合并</a></li>
         <li><a href="#页的回收">页的回收</a></li>
+      </ul>
+    </li>
+    <li><a href="#页的查找">页的查找</a>
+      <ul>
+        <li><a href="#非叶子节点的mode">非叶子节点的mode</a></li>
+        <li><a href="#latch_mode">latch_mode</a></li>
+        <li><a href="#btr-cursor">btr cursor</a></li>
+        <li><a href="#持久游标">持久游标</a></li>
+      </ul>
+    </li>
+    <li><a href="#b-tree中变更记录">B+ tree中变更记录</a>
+      <ul>
+        <li><a href="#插入记录">插入记录</a>
+          <ul>
+            <li><a href="#乐观插入">乐观插入</a></li>
+            <li><a href="#悲观插入">悲观插入</a></li>
+          </ul>
+        </li>
+        <li><a href="#更新记录">更新记录</a>
+          <ul>
+            <li><a href="#非主键更新">非主键更新</a>
+              <ul>
+                <li><a href="#原地更新">原地更新</a></li>
+                <li><a href="#乐观更新">乐观更新</a></li>
+                <li><a href="#悲观更新">悲观更新</a></li>
+              </ul>
+            </li>
+            <li><a href="#主键更新">主键更新</a></li>
+          </ul>
+        </li>
+        <li><a href="#删除记录">删除记录</a>
+          <ul>
+            <li><a href="#delete-mark">delete mark</a></li>
+            <li><a href="#purge-deleted-index-record">purge deleted index record</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><a href="#自适应哈希索引转">自适应哈希索引（转）</a>
+      <ul>
+        <li><a href="#创建ahi">创建AHI</a></li>
+        <li><a href="#维护ahi的查询信息">维护AHI的查询信息</a>
+          <ul>
+            <li><a href="#更新索引的查询信息">更新索引的查询信息</a></li>
+            <li><a href="#更新block的查询信息">更新block的查询信息</a></li>
+            <li><a href="#build-ahi">build AHI</a></li>
+            <li><a href="#index-search-info">index search info</a></li>
+          </ul>
+        </li>
+        <li><a href="#使用ahi">使用AHI</a></li>
+        <li><a href="#shortcut查询模式">shortcut查询模式</a></li>
+        <li><a href="#ahi运维和监控项">AHI运维和监控项</a>
+          <ul>
+            <li><a href="#ahi参数">AHI参数</a></li>
+            <li><a href="#ahi监控项">AHI监控项</a></li>
+          </ul>
+        </li>
       </ul>
     </li>
   </ul>
