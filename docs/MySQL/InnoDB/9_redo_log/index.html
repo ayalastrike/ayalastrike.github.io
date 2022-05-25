@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content=" MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning（转）   NET VIO MySQL 8.0 对网络模块的优化（转） MySQL 8.0 通过Resource Group来控制线程计算资源（转） MariaDB MaxScale Proxy Protocol（转） 用户建链（转）   Timeout机制 Thread Pool MDL IO_CACHE 内存管理 信号处理机制 日志 read_only lower_case_table_names Invisible Index   InnoDB  概览 源码结构 record page storage buffer pool B&#43; tree change buffer redo log lock transaction   Replication    ">
+<meta name="description" content="">
 <meta name="theme-color" content="#FFFFFF">
-<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
-<meta property="og:description" content=" MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning（转）   NET VIO MySQL 8.0 对网络模块的优化（转） MySQL 8.0 通过Resource Group来控制线程计算资源（转） MariaDB MaxScale Proxy Protocol（转） 用户建链（转）   Timeout机制 Thread Pool MDL IO_CACHE 内存管理 信号处理机制 日志 read_only lower_case_table_names Invisible Index   InnoDB  概览 源码结构 record page storage buffer pool B&#43; tree change buffer redo log lock transaction   Replication    " />
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="lock" />
+<meta property="og:description" content="" />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://ayalastrike.github.io/menu/" /><meta property="article:section" content="" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/InnoDB/9_redo_log/" /><meta property="article:section" content="docs" />
 
 <meta property="article:modified_time" content="2022-05-25T20:54:19&#43;08:00" />
 
-<title>Index | Rick&#39;s Blog</title>
+<title>lock | Rick&#39;s Blog</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
@@ -99,7 +99,7 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/InnoDB/6_buffer_pool/">buffer pool</a></li>
 <li><a href="/docs/MySQL/InnoDB/7_b+_tree/">B+ tree</a></li>
 <li><a href="/docs/MySQL/InnoDB/8_change_buffer/">change buffer</a></li>
-<li><a href="/docs/MySQL/InnoDB/9_redo_log/">redo log</a></li>
+<li><a href="/docs/MySQL/InnoDB/9_redo_log/"class=active>redo log</a></li>
 <li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a></li>
 <li><a href="/docs/MySQL/InnoDB/11_transaction/">transaction</a></li>
 </ul>
@@ -150,7 +150,7 @@ https://github.com/alex-shpak/hugo-book
     <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
   </label>
 
-  <strong>Index</strong>
+  <strong>lock</strong>
 
   <label for="toc-control">
     
@@ -175,60 +175,7 @@ https://github.com/alex-shpak/hugo-book
 
       
       
-  <article class="markdown"><ul>
-<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
-<ul>
-<li><a href="/docs/MySQL/Server/">Server</a>
-<ul>
-<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
-<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
-<ul>
-<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
-<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
-<ul>
-<li><a href="/docs/MySQL/Server/returning/">Returning（转）</a></li>
-</ul>
-</li>
-<li><a href="/docs/MySQL/Server/net/">NET</a></li>
-<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
-<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化（转）</a></li>
-<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源（转）</a></li>
-<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol（转）</a></li>
-<li><a href="/docs/MySQL/Server/user_connection_handler/">用户建链（转）</a></li>
-</ul>
-</li>
-<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
-<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
-<li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
-<li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
-<li><a href="/docs/MySQL/Server/memory/">内存管理</a></li>
-<li><a href="/docs/MySQL/Server/signal_handler/">信号处理机制</a></li>
-<li><a href="/docs/MySQL/Server/log/">日志</a></li>
-<li><a href="/docs/MySQL/Server/read_only/">read_only</a></li>
-<li><a href="/docs/MySQL/Server/lower_case_table_names/">lower_case_table_names</a></li>
-<li><a href="/docs/MySQL/Server/invisible_index/">Invisible Index</a></li>
-</ul>
-</li>
-<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
-<ul>
-<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
-<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
-<li><a href="/docs/MySQL/InnoDB/3_record/">record</a></li>
-<li><a href="/docs/MySQL/InnoDB/4_page/">page</a></li>
-<li><a href="/docs/MySQL/InnoDB/5_storage/">storage</a></li>
-<li><a href="/docs/MySQL/InnoDB/6_buffer_pool/">buffer pool</a></li>
-<li><a href="/docs/MySQL/InnoDB/7_b+_tree/">B+ tree</a></li>
-<li><a href="/docs/MySQL/InnoDB/8_change_buffer/">change buffer</a></li>
-<li><a href="/docs/MySQL/InnoDB/9_redo_log/">redo log</a></li>
-<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a></li>
-<li><a href="/docs/MySQL/InnoDB/11_transaction/">transaction</a></li>
-</ul>
-</li>
-<li><a href="/docs/MySQL/Replication/">Replication</a></li>
-</ul>
-</li>
-</ul>
-</article>
+  <article class="markdown"></article>
  
       
 
@@ -252,10 +199,6 @@ https://github.com/alex-shpak/hugo-book
       </footer>
 
       
-  
-  <div class="book-comments">
-
-</div>
   
  
 

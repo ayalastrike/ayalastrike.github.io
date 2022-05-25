@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="change buffer是InnoDB所特有的，设计思想非常先进，首先详细介绍change buffer的设计机制和实现细节，然后介绍其为了避免死锁所做的考虑。
+设计 #  change buffer目的是减少随机访问磁盘，提升non-unique secondary index（以下简称NUSI）的变更效率，在IO-bound workload下很有必要。
+在InnoDB中，数据顺序存储在clustered index的leaf node，secondary index leaf node则是离散的，因此，对seconary index leaf node的变更操作是随机IO。为了提升secondary index的磁盘IO效率，InnoDB的做法是采用写缓冲机制，将NUSI的变更操作缓冲下来（leaf page oriented），减少随机IO，并在合适的时机将多次对同一页的操作进行merge，这块缓存称为change buffer。
+当导入大量数据时，DBA常见的一个做法是，先disable keys，然后倒入数据后再enable keys，这也是减少随机IO手段的一个体现。  这里借用官方一张图，可以给大家带来直观的理解：
+在MySQL 5.5之前，因为只支持缓存insert操作，所以叫做insert buffer，后面支持了更多的操作类型（一共有insert、delete mark、delete），才改叫change buffer。
+那为什么只对non-unique进行cache呢？这是因为unique index要保证唯一性约束，在插入记录时要判断是否唯一，势必要读取secondary page leaf node，而这样做违反了change buffer的设计目的。但是，对于unique secondary index的delete操作，是可以缓存在change buffer中的。
+change buffer也是一颗B&#43; tree，这颗B&#43; tree的page也会使用buffer pool的内存空间（但是会限制其占用的比例，最多25% CHANGE_BUFFER_DEFAULT_SIZE）。
+在更新NUSI时，首先判断leaf page是否在buffer pool中，如果在，则直接在内存中更新page；否则满足缓存条件后将变更缓存到change buffer中（保存位置&#43;op&#43;data），然后在后台异步将change buffer缓存写回NUSI的leaf page中，GC并推进LWN。
+从这里可以看到，secondary index的变更的路径分为两个分支：
+ 如果NUSI的leaf page在buffer pool中：这个和之前B&#43; tree中页的更新完全一样，不再详述，可以保证A、D，也可以保证index tree页操作的一致性（SMO） 如果不在，变更先缓存到change buffer中，然后再写回原处：这里要保证change buffer的A、D  这里更新NUSI的场景有：
+ 用户线程的DML 后台purge线程  对于读取来说，直接通过物理读读取NUSI的leaf page后，需要判断change buffer中是否已缓存变更操作（缓存该页的change buffer record），如果进行了缓存，要先merge change buffer，然后再读取leaf page中的record。">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="change buffer" />
+<meta property="og:description" content="change buffer是InnoDB所特有的，设计思想非常先进，首先详细介绍change buffer的设计机制和实现细节，然后介绍其为了避免死锁所做的考虑。
+设计 #  change buffer目的是减少随机访问磁盘，提升non-unique secondary index（以下简称NUSI）的变更效率，在IO-bound workload下很有必要。
+在InnoDB中，数据顺序存储在clustered index的leaf node，secondary index leaf node则是离散的，因此，对seconary index leaf node的变更操作是随机IO。为了提升secondary index的磁盘IO效率，InnoDB的做法是采用写缓冲机制，将NUSI的变更操作缓冲下来（leaf page oriented），减少随机IO，并在合适的时机将多次对同一页的操作进行merge，这块缓存称为change buffer。
+当导入大量数据时，DBA常见的一个做法是，先disable keys，然后倒入数据后再enable keys，这也是减少随机IO手段的一个体现。  这里借用官方一张图，可以给大家带来直观的理解：
+在MySQL 5.5之前，因为只支持缓存insert操作，所以叫做insert buffer，后面支持了更多的操作类型（一共有insert、delete mark、delete），才改叫change buffer。
+那为什么只对non-unique进行cache呢？这是因为unique index要保证唯一性约束，在插入记录时要判断是否唯一，势必要读取secondary page leaf node，而这样做违反了change buffer的设计目的。但是，对于unique secondary index的delete操作，是可以缓存在change buffer中的。
+change buffer也是一颗B&#43; tree，这颗B&#43; tree的page也会使用buffer pool的内存空间（但是会限制其占用的比例，最多25% CHANGE_BUFFER_DEFAULT_SIZE）。
+在更新NUSI时，首先判断leaf page是否在buffer pool中，如果在，则直接在内存中更新page；否则满足缓存条件后将变更缓存到change buffer中（保存位置&#43;op&#43;data），然后在后台异步将change buffer缓存写回NUSI的leaf page中，GC并推进LWN。
+从这里可以看到，secondary index的变更的路径分为两个分支：
+ 如果NUSI的leaf page在buffer pool中：这个和之前B&#43; tree中页的更新完全一样，不再详述，可以保证A、D，也可以保证index tree页操作的一致性（SMO） 如果不在，变更先缓存到change buffer中，然后再写回原处：这里要保证change buffer的A、D  这里更新NUSI的场景有：
+ 用户线程的DML 后台purge线程  对于读取来说，直接通过物理读读取NUSI的leaf page后，需要判断change buffer中是否已缓存变更操作（缓存该页的change buffer record），如果进行了缓存，要先merge change buffer，然后再读取leaf page中的record。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/InnoDB/8_change_buffer/" /><meta property="article:section" content="docs" />
+
+<meta property="article:modified_time" content="2022-05-25T20:54:19&#43;08:00" />
+
+<title>change buffer | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.7e953de807a26c4f46e87ee0cdf72270c0980b3b8637e4df973f5a7e8770270b.js" integrity="sha256-fpU96AeibE9G6H7gzfcicMCYCzuGN&#43;Tflz9afodwJws=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning（转）</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化（转）</a></li>
+<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源（转）</a></li>
+<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol（转）</a></li>
+<li><a href="/docs/MySQL/Server/user_connection_handler/">用户建链（转）</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+<li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
+<li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
+<li><a href="/docs/MySQL/Server/memory/">内存管理</a></li>
+<li><a href="/docs/MySQL/Server/signal_handler/">信号处理机制</a></li>
+<li><a href="/docs/MySQL/Server/log/">日志</a></li>
+<li><a href="/docs/MySQL/Server/read_only/">read_only</a></li>
+<li><a href="/docs/MySQL/Server/lower_case_table_names/">lower_case_table_names</a></li>
+<li><a href="/docs/MySQL/Server/invisible_index/">Invisible Index</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_page/">page</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_storage/">storage</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_buffer_pool/">buffer pool</a></li>
+<li><a href="/docs/MySQL/InnoDB/7_b+_tree/">B+ tree</a></li>
+<li><a href="/docs/MySQL/InnoDB/8_change_buffer/"class=active>change buffer</a></li>
+<li><a href="/docs/MySQL/InnoDB/9_redo_log/">redo log</a></li>
+<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a></li>
+<li><a href="/docs/MySQL/InnoDB/11_transaction/">transaction</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Replication/">Replication</a></li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>change buffer</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#设计">设计</a></li>
+    <li><a href="#实现">实现</a>
+      <ul>
+        <li><a href="#change-buffer-tree">change buffer tree</a></li>
+        <li><a href="#change-buffer-record">change buffer record</a></li>
+        <li><a href="#change-buffer-bitmap-page">change buffer bitmap page</a></li>
+        <li><a href="#缓存">缓存</a>
+          <ul>
+            <li><a href="#缓存条件">缓存条件</a></li>
+          </ul>
+        </li>
+        <li><a href="#change-buffer-merge">change buffer merge</a>
+          <ul>
+            <li><a href="#主动merge">主动merge</a></li>
+            <li><a href="#被动merge">被动merge</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><p>change buffer是InnoDB所特有的，设计思想非常先进，首先详细介绍change buffer的设计机制和实现细节，然后介绍其为了避免死锁所做的考虑。</p>
+<h1 id="设计">
+  设计
+  <a class="anchor" href="#%e8%ae%be%e8%ae%a1">#</a>
+</h1>
+<p>change buffer目的是减少随机访问磁盘，提升non-unique secondary index（以下简称NUSI）的变更效率，在IO-bound workload下很有必要。</p>
+<p>在InnoDB中，数据顺序存储在clustered index的leaf node，secondary index leaf node则是离散的，因此，对seconary index leaf node的变更操作是随机IO。为了提升secondary index的磁盘IO效率，InnoDB的做法是采用写缓冲机制，将NUSI的变更操作缓冲下来（leaf page oriented），减少随机IO，并在合适的时机将多次对同一页的操作进行merge，这块缓存称为change buffer。</p>
+<blockquote class="book-hint info">
+  当导入大量数据时，DBA常见的一个做法是，先disable keys，然后倒入数据后再enable keys，这也是减少随机IO手段的一个体现。
+</blockquote>
+
+<p>这里借用官方一张图，可以给大家带来直观的理解：</p>
+<p><img src="/InnoDB_change_buffer.png" alt="InnoDB_change_buffer" /></p>
+<p>在MySQL 5.5之前，因为只支持缓存insert操作，所以叫做insert buffer，后面支持了更多的操作类型（一共有insert、delete mark、delete），才改叫change buffer。</p>
+<p>那为什么只对non-unique进行cache呢？这是因为unique index要保证唯一性约束，在插入记录时要判断是否唯一，势必要读取secondary page leaf node，而这样做违反了change buffer的设计目的。但是，对于unique secondary index的delete操作，是可以缓存在change buffer中的。</p>
+<p>change buffer也是一颗B+ tree，这颗B+ tree的page也会使用buffer pool的内存空间（但是会限制其占用的比例，最多25% CHANGE_BUFFER_DEFAULT_SIZE）。</p>
+<p>在更新NUSI时，首先判断leaf page是否在buffer pool中，如果在，则直接在内存中更新page；否则满足缓存条件后将变更缓存到change buffer中（保存位置+op+data），然后在后台异步将change buffer缓存写回NUSI的leaf page中，GC并推进LWN。</p>
+<p>从这里可以看到，secondary index的变更的路径分为两个分支：</p>
+<ul>
+<li>如果NUSI的leaf page在buffer pool中：这个和之前B+ tree中页的更新完全一样，不再详述，可以保证A、D，也可以保证index tree页操作的一致性（SMO）</li>
+<li>如果不在，变更先缓存到change buffer中，然后再写回原处：这里要保证change buffer的A、D</li>
+</ul>
+<p>这里更新NUSI的场景有：</p>
+<ul>
+<li>用户线程的DML</li>
+<li>后台purge线程</li>
+</ul>
+<p>对于读取来说，直接通过物理读读取NUSI的leaf page后，需要判断change buffer中是否已缓存变更操作（缓存该页的change buffer record），如果进行了缓存，要先merge change buffer，然后再读取leaf page中的record。</p>
+<p>那么接下来看一下InnoDB中的change buffer的具体实现细节。</p>
+<h1 id="实现">
+  实现
+  <a class="anchor" href="#%e5%ae%9e%e7%8e%b0">#</a>
+</h1>
+<p>首先，change buffer也是一颗B+ tree，page大小也是16K，我们先从page和tree的组织谈起，然后再进入到page内部的记录，接着看merge是如何写回原处的，最后是gc，也就是purge线程推进LWM。</p>
+<h2 id="change-buffer-tree">
+  change buffer tree
+  <a class="anchor" href="#change-buffer-tree">#</a>
+</h2>
+<p>change buffer tree虽然也是一个B+ tree，但是其和之前的index tree有异同之处。</p>
+<p>相同的地方：</p>
+<ol>
+<li>叶子和非叶节点存储的数据和B+ tree一样，也是branch node（node pointer，存储的是key + page_no）和leaf node（key+data）</li>
+</ol>
+<p>差异的地方：</p>
+<ol>
+<li>change buffer tree全局只有一颗，类型为DICT_CLUSTERED | DICT_IBUF，index_id = 0xFFFFFFFF00000000ULL</li>
+<li>change buffer tree的index root page是固定的，位于系统表空间的（0, 4）位置</li>
+<li>空闲页通过链表管理，链表在index root page（PAGE_BTR_IBUF_FREE_LIST），复用了原来的leaf segment header（PAGE_BTR_SEG_LEAF），空闲页的页类型为FIL_PAGE_IBUF_FREE_LIST，空闲页通过链表节点串联前后位置（PAGE_BTR_IBUF_FREE_LIST_NODE），也复用了原来的leaf segment header</li>
+<li>因为#3复用了leaf segment header，所以用一个特殊的change buffer header page（0, 3）用于change buffer tree page的管理，其segment entry位于IBUF_TREE_SEG_HEADER（PAGE_BTR_SEG_LEAF PAGE_DATA + 0：38 + 0）</li>
+</ol>
+<h2 id="change-buffer-record">
+  change buffer record
+  <a class="anchor" href="#change-buffer-record">#</a>
+</h2>
+<p>change buffer record历史上有过多次版本演进，这里以MySQL 5.7.26中使用记录格式为例介绍。</p>
+<p>chagne buffer tree中的leaf node（页）中的记录格式为：</p>
+<p><img src="/InnoDB_change_buffer_record.png" alt="InnoDB_change_buffer_record" /></p>
+<p>其中，space_id+page_no+count可以表示页的变更序（INSERT x, DEL MARK x, INSERT x），在构建change buffer record时：</p>
+<ol>
+<li>首先将count设为0xFFFF</li>
+<li>然后再change buffer tree的leaf node中通过page cursor LE模式查找定位（space_id, page_no, 0xFFFF）到最后一条已存在的记录</li>
+<li>取该记录的count+1作为此次插入记录的count</li>
+</ol>
+<p>这三元组也是change buffer tree的key。</p>
+<p>op有3种：insert、delete mark、delete</p>
+<pre><code>typedef enum {
+    IBUF_OP_INSERT = 0,
+    IBUF_OP_DELETE_MARK = 1,
+    IBUF_OP_DELETE = 2,
+ 
+    /* Number of different operation types. */
+    IBUF_OP_COUNT = 3
+} ibuf_op_t;
+</code></pre><h2 id="change-buffer-bitmap-page">
+  change buffer bitmap page
+  <a class="anchor" href="#change-buffer-bitmap-page">#</a>
+</h2>
+<p>change buffer会将更改的辅助索引记录缓存起来，但是其必须保证merge一定成功，即保证缓存的NUSI leaf page在merge change buffer record后不会引发页的合并或分裂。</p>
+<p>为了保证这一点，change buffer就需要tracking NUSI leaf page上的空闲空间，存储这个信息的页被称为change buffer bitmap page。该页在每个XDE page后一页出现（每256M一个，第2个页），每个index page用4个bit来描述，整个占用8192字节。</p>
+<p>ibuf bitmap page的页面布局如下：</p>
+<p><img src="/InnoDB_change_buffer_bitmap_page.png" alt="InnoDB_change_buffer_bitmap_page" /></p>
+<p>change buffer bitmap中保存的针对每个页的bitmap中位信息如下：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">字段</th>
+<th style="text-align:left">占用位</th>
+<th style="text-align:left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">IBUF_BITMAP_FREE</td>
+<td style="text-align:left">2</td>
+<td style="text-align:left">记录UNSI leaf page的剩余空间</td>
+</tr>
+<tr>
+<td style="text-align:left">IBUF_BITMAP_BUFFERED</td>
+<td style="text-align:left">1</td>
+<td style="text-align:left">该页是否已被chagne buffer cache，用于物理读NUSI leaf page后判断是否需要merge</td>
+</tr>
+<tr>
+<td style="text-align:left">IBUF_BITMAP_IBUF</td>
+<td style="text-align:left">1</td>
+<td style="text-align:left">该页是否为change buffer page</td>
+</tr>
+</tbody>
+</table>
+<p>其中IBUF_BITMAP_FREE表示的剩余空间含义为：</p>
+<ul>
+<li>0：    0</li>
+<li>1：  512 bytes</li>
+<li>2：1024 bytes</li>
+<li>3：2048 bytes</li>
+</ul>
+<p>从上面可以看出，因为change buffer bitmap只能追踪一个UNSI leaf page最多2KB的空闲空间，因此change buffer一次最多缓存的记录总量为2KB。</p>
+<p>IBUF_BITMAP_FREE的信息在每次UNSI leaf page更改时都会更新。</p>
+<h2 id="缓存">
+  缓存
+  <a class="anchor" href="#%e7%bc%93%e5%ad%98">#</a>
+</h2>
+<p>对于change buffer，可以缓存的操作有：</p>
+<pre><code>/** Allowed values of innodb_change_buffering */
+static const char* innobase_change_buffering_values[IBUF_USE_COUNT] = {
+    &quot;none&quot;,     /* IBUF_USE_NONE */
+    &quot;inserts&quot;,  /* IBUF_USE_INSERT */
+    &quot;deletes&quot;,  /* IBUF_USE_DELETE_MARK */
+    &quot;changes&quot;,  /* IBUF_USE_INSERT_DELETE_MARK */
+    &quot;purges&quot;,   /* IBUF_USE_DELETE */
+    &quot;all&quot;       /* IBUF_USE_ALL */
+};
+</code></pre><p>这些操作对应到DML为：</p>
+<ul>
+<li>insert
+<ul>
+<li>乐观插入：inserts</li>
+</ul>
+</li>
+<li>update
+<ul>
+<li>非主键更新
+<ul>
+<li>乐观更新（delete mark+insert）：changes</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>delete
+<ul>
+<li>delete mark：deletes</li>
+<li>purge：purges</li>
+</ul>
+</li>
+</ul>
+<p>这里前3种都为用户线程的DML触发，而最后一种为后台purge线程触发。</p>
+<h3 id="缓存条件">
+  缓存条件
+  <a class="anchor" href="#%e7%bc%93%e5%ad%98%e6%9d%a1%e4%bb%b6">#</a>
+</h3>
+<p>只有真正删除UNSI leaf page上的物理记录才会导致页的合并，而这只有purge线程才做这个动作。因此，只有purge线程准备插入op=IBUF_OP_DELETE的change buffer record时，才进行判定：先预估在merge完成后该page上的所有change buffer record后，还会剩下多少记录（ibuf_get_volume_buffered）。如果只剩下一条记录，为了避免成为empty page而触发页的合并，则不进行cache，而走普通的的修改流程（将UNSI leaf page读入buffer pool，merge change buffer record，然后再进行页的修改）。</p>
+<p>在进行UNSI操作时，满足下面条件，才进行cache（ibuf_should_try）：</p>
+<ol>
+<li>开启了innodb_change_buffering且innodb_change_buffer_max_size不为0</li>
+<li>必须是UNSI leaf node（delete mark不要求unique）</li>
+<li>表没有进行flush操作（通过dict_table_t::quiesce 标识）：flush table xxx with read lock/for export</li>
+</ol>
+<p>满足以上条件后，通过buf_page_get_gen尝试获取数据页：</p>
+<ul>
+<li>BUF_GET_IF_IN_POOL：只在buffer pool中查找，不在直接返回null</li>
+<li>BUF_GET_IF_IN_POOL_OR_WATCH：purge线程使用，只在buffer pool中查找（在：加LRU list+线性预读，不在：设置watch）</li>
+</ul>
+<p>如果不在buffer pool中，则判断如果不会导致页的分裂、合并后，进行缓存。</p>
+<p>为了避免页的分裂，则通过space_id+page_no获取对应的change buffer bitmap page，然后找到该数据页的空闲空间，如果超出，则进行异步merge。</p>
+<p>ibuf_insert_low</p>
+<pre><code>if (op == IBUF_OP_INSERT) {
+    ulint   bits = ibuf_bitmap_page_get_bits(
+        bitmap_page, page_id, page_size, IBUF_BITMAP_FREE,
+        &amp;bitmap_mtr);
+ 
+    if (buffered + entry_size + page_dir_calc_reserved_space(1)
+        &gt; ibuf_index_page_calc_free_from_bits(page_size, bits)) {
+        /* Release the bitmap page latch early. */
+        ibuf_mtr_commit(&amp;bitmap_mtr);
+ 
+        /* It may not fit */
+        do_merge = TRUE;
+ 
+        ibuf_get_merge_page_nos(FALSE,
+                    btr_pcur_get_rec(&amp;pcur), &amp;mtr,
+                    space_ids,
+                    page_nos, &amp;n_stored);
+ 
+        goto fail_exit;
+    }
+}
+</code></pre><h2 id="change-buffer-merge">
+  change buffer merge
+  <a class="anchor" href="#change-buffer-merge">#</a>
+</h2>
+<p>正如前面介绍的，change buffer最多使用buffer pool的25%，所以变更的辅助索引记录不可能一直停留在change buffer索引树中，记录的变化最终还是要存储到UNSI leaf page中，这个操作称为merge。</p>
+<p>根据处理方式的不同，merge可以分为主动和被动两类。</p>
+<h3 id="主动merge">
+  主动merge
+  <a class="anchor" href="#%e4%b8%bb%e5%8a%a8merge">#</a>
+</h3>
+<p>主动merge是指由用户线程主动发起的UNSI leaf page页的读取操作，这时会将记录merge到leaf page上，并且，由于leaf page已经读取到buffer pool，那么之后对于该页的更改操作将不会再缓存到change buffer，为同步IO。</p>
+<h3 id="被动merge">
+  被动merge
+  <a class="anchor" href="#%e8%a2%ab%e5%8a%a8merge">#</a>
+</h3>
+<ul>
+<li>已经为NUSI leaf page buffer了太多change buffer record，可能导致NUSI leaf page分裂，发起异步IO读取leaf page后merge，最多merge8个leaf page（IBUF_MERGE_AREA）</li>
+<li>change buffer tree size超过最大值10以上（ibuf→max_size + 10 IBUF_CONTRACT_DO_NOT_INSERT），进行同步IO merge（ibuf_contract），随机merge 8个leaf page</li>
+<li>可能引起change buffer tree上page的分裂
+<ul>
+<li>ibuf→size &lt; ibuf→max_size，no-op</li>
+<li>ibuf→size &gt;= ibuf→max_size +5（IBUF_CONTRACT_ON_INSERT_SYNC），进行同步IO merge，随机</li>
+<li>在二者之间，进行异步IO merge，随机</li>
+</ul>
+</li>
+<li>后台master thread周期性merge（ibuf_merge_in_background）
+<ul>
+<li>IDLE：100% io_capacity</li>
+<li>ACTIVE：5% io_capacity</li>
+</ul>
+</li>
+<li>slow shutdown，全部merge（srv_master_do_shutdown_tasks）</li>
+<li>flush table：flush table xxx for export/with read lock; 表级别merge</li>
+</ul>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#设计">设计</a></li>
+    <li><a href="#实现">实现</a>
+      <ul>
+        <li><a href="#change-buffer-tree">change buffer tree</a></li>
+        <li><a href="#change-buffer-record">change buffer record</a></li>
+        <li><a href="#change-buffer-bitmap-page">change buffer bitmap page</a></li>
+        <li><a href="#缓存">缓存</a>
+          <ul>
+            <li><a href="#缓存条件">缓存条件</a></li>
+          </ul>
+        </li>
+        <li><a href="#change-buffer-merge">change buffer merge</a>
+          <ul>
+            <li><a href="#主动merge">主动merge</a></li>
+            <li><a href="#被动merge">被动merge</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

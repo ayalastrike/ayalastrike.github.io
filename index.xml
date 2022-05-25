@@ -16,6 +16,24 @@
     
     <item>
       <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/10_lock/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/10_lock/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/11_transaction/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/11_transaction/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title></title>
       <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/2_source/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
@@ -356,10 +374,7 @@ The VIO routines are wrappers for the various network I/O calls that happen with
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/menu/</guid>
-      <description> MySQL   Server
- MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning（转）   NET VIO MySQL 8.0 对网络模块的优化（转） MySQL 8.0 通过Resource Group来控制线程计算资源（转） MariaDB MaxScale Proxy Protocol（转） 用户建链（转）   Timeout机制 Thread Pool MDL IO_CACHE 内存管理 信号处理机制 日志 read_only lower_case_table_names Invisible Index    InnoDB
- 概览 源码结构 record page storage buffer pool B+ tree    Replication
-    </description>
+      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning（转）   NET VIO MySQL 8.0 对网络模块的优化（转） MySQL 8.0 通过Resource Group来控制线程计算资源（转） MariaDB MaxScale Proxy Protocol（转） 用户建链（转）   Timeout机制 Thread Pool MDL IO_CACHE 内存管理 信号处理机制 日志 read_only lower_case_table_names Invisible Index   InnoDB  概览 源码结构 record page storage buffer pool B+ tree change buffer redo log lock transaction   Replication    </description>
     </item>
     
     <item>
@@ -401,6 +416,34 @@ spatial control 空间控制
  where to write pages on disk. the goal is to keep pages that are used together often as physically close together as possible on disk.  temporal control 时间控制
  when to read pages into memory, and when to write them to disk. the goal is minimize the number of stalls from having to read data from disk.  在以下章节中，InnoDB数据结构中的buf_block_t，buf_page_t、frame按照Jim Gray的命名进行转换，称为block（以下称为PCB，包含meta+data）、meta和frame（data）。
 概述 #  buffer pool #  InnoDB是基于磁盘存储的存储引擎，磁盘中的记录以页为单位进行管理。</description>
+    </item>
+    
+    <item>
+      <title>change buffer</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/8_change_buffer/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/8_change_buffer/</guid>
+      <description>change buffer是InnoDB所特有的，设计思想非常先进，首先详细介绍change buffer的设计机制和实现细节，然后介绍其为了避免死锁所做的考虑。
+设计 #  change buffer目的是减少随机访问磁盘，提升non-unique secondary index（以下简称NUSI）的变更效率，在IO-bound workload下很有必要。
+在InnoDB中，数据顺序存储在clustered index的leaf node，secondary index leaf node则是离散的，因此，对seconary index leaf node的变更操作是随机IO。为了提升secondary index的磁盘IO效率，InnoDB的做法是采用写缓冲机制，将NUSI的变更操作缓冲下来（leaf page oriented），减少随机IO，并在合适的时机将多次对同一页的操作进行merge，这块缓存称为change buffer。
+当导入大量数据时，DBA常见的一个做法是，先disable keys，然后倒入数据后再enable keys，这也是减少随机IO手段的一个体现。  这里借用官方一张图，可以给大家带来直观的理解：
+在MySQL 5.5之前，因为只支持缓存insert操作，所以叫做insert buffer，后面支持了更多的操作类型（一共有insert、delete mark、delete），才改叫change buffer。
+那为什么只对non-unique进行cache呢？这是因为unique index要保证唯一性约束，在插入记录时要判断是否唯一，势必要读取secondary page leaf node，而这样做违反了change buffer的设计目的。但是，对于unique secondary index的delete操作，是可以缓存在change buffer中的。
+change buffer也是一颗B+ tree，这颗B+ tree的page也会使用buffer pool的内存空间（但是会限制其占用的比例，最多25% CHANGE_BUFFER_DEFAULT_SIZE）。
+在更新NUSI时，首先判断leaf page是否在buffer pool中，如果在，则直接在内存中更新page；否则满足缓存条件后将变更缓存到change buffer中（保存位置+op+data），然后在后台异步将change buffer缓存写回NUSI的leaf page中，GC并推进LWN。
+从这里可以看到，secondary index的变更的路径分为两个分支：
+ 如果NUSI的leaf page在buffer pool中：这个和之前B+ tree中页的更新完全一样，不再详述，可以保证A、D，也可以保证index tree页操作的一致性（SMO） 如果不在，变更先缓存到change buffer中，然后再写回原处：这里要保证change buffer的A、D  这里更新NUSI的场景有：
+ 用户线程的DML 后台purge线程  对于读取来说，直接通过物理读读取NUSI的leaf page后，需要判断change buffer中是否已缓存变更操作（缓存该页的change buffer record），如果进行了缓存，要先merge change buffer，然后再读取leaf page中的record。</description>
+    </item>
+    
+    <item>
+      <title>lock</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/9_redo_log/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/9_redo_log/</guid>
+      <description></description>
     </item>
     
     <item>

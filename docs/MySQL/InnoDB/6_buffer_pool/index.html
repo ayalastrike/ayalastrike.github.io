@@ -20,14 +20,14 @@ spatial control 空间控制
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/InnoDB/6_buffer_pool/" /><meta property="article:section" content="docs" />
 
-<meta property="article:modified_time" content="2022-05-22T17:14:10&#43;08:00" />
+<meta property="article:modified_time" content="2022-05-25T20:54:19&#43;08:00" />
 
 <title>buffer pool | Rick&#39;s Blog</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.060ce6c1149f7865047c0927acccf1c977557a0be744ae0f75c37f29c8c7b423.js" integrity="sha256-BgzmwRSfeGUEfAknrMzxyXdVegvnRK4PdcN/KcjHtCM=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.7e953de807a26c4f46e87ee0cdf72270c0980b3b8637e4df973f5a7e8770270b.js" integrity="sha256-fpU96AeibE9G6H7gzfcicMCYCzuGN&#43;Tflz9afodwJws=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -68,8 +68,7 @@ https://github.com/alex-shpak/hugo-book
   <ul>
 <li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
 <ul>
-<li>
-<p><a href="/docs/MySQL/Server/">Server</a></p>
+<li><a href="/docs/MySQL/Server/">Server</a>
 <ul>
 <li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
 <li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
@@ -100,8 +99,7 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/Server/invisible_index/">Invisible Index</a></li>
 </ul>
 </li>
-<li>
-<p><a href="/docs/MySQL/InnoDB/">InnoDB</a></p>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
 <ul>
 <li><a href="/docs/MySQL/InnoDB/1_overview/">概览</a></li>
 <li><a href="/docs/MySQL/InnoDB/2_source/">源码结构</a></li>
@@ -110,11 +108,13 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/InnoDB/5_storage/">storage</a></li>
 <li><a href="/docs/MySQL/InnoDB/6_buffer_pool/"class=active>buffer pool</a></li>
 <li><a href="/docs/MySQL/InnoDB/7_b+_tree/">B+ tree</a></li>
+<li><a href="/docs/MySQL/InnoDB/8_change_buffer/">change buffer</a></li>
+<li><a href="/docs/MySQL/InnoDB/9_redo_log/">redo log</a></li>
+<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a></li>
+<li><a href="/docs/MySQL/InnoDB/11_transaction/">transaction</a></li>
 </ul>
 </li>
-<li>
-<p><a href="/docs/MySQL/Replication/">Replication</a></p>
-</li>
+<li><a href="/docs/MySQL/Replication/">Replication</a></li>
 </ul>
 </li>
 </ul>
@@ -455,7 +455,9 @@ Hash table size 276671, used cells 15, node heap has 1 buffer(s)
 <li>
 <p>BUF_BLOCK_POOL_WATCH：被哨兵看管的数据页。这种类型的page是提供给purge线程用的。InnoDB为了实现MVCC，需要把之前的数据记录在undo log中，如果没有读请求再需要它，就可以通过purge线程删除。换句话说，purge线程需要知道某些数据页是否被读取，实现的方式（buf_pool_watch_set）是首先查看page hash，看看这个数据页是否已经被读入，如果没有读入，则获取一个BUF_BLOCK_POOL_WATCH类型的哨兵数据页控制体，同时加入page_hash中（但其中并没有真正的数据：buf_block_t::frame为空），并把其类型置为BUF_BLOCK_ZIP_PAGE（表示已经被使用了，其他purge线程就不会用到这个控制体了）。如果查看page hash后发现有这个数据页，只需要判断控制体在内存中的地址是否属于Buffer Chunks即表示对应数据页已经被其他线程读入（buf_pool_watch_occurred）。另一方面，如果用户线程需要这个数据页，先查看page hash是否为BUF_BLOCK_POOL_WATCH类型的数据页，如果是则回收，从free链表（即在buffer chunks中）分配一个空闲的控制体，填入数据。这里的核心思想就是通过控制体在内存中的地址来确定数据页是否还在被使用。此状态为暂态。</p>
 <blockquote class="book-hint info">
-  每个缓冲池instance配置配置<a href="https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_purge_threads">purge thread</a>（默认：4）个哨兵数据页控制体，通过buffer_pool-&gt;watch数组管理。
+  <p>每个缓冲池instance配置配置<a href="https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_purge_threads">purge thread</a>（默认：4）个哨兵数据页控制体，通过buffer_pool-&gt;watch数组管理。</p>
+<p>也意味着即使所有purge线程同时访问同一个buffer pool instance，也至少会有一个空闲的watch[n]</p>
+
 </blockquote>
 
 </li>
