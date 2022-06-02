@@ -443,7 +443,16 @@ change buffer也是一颗B+ tree，这颗B+ tree的page也会使用buffer pool�
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/9_redo_log/</guid>
-      <description></description>
+      <description>日志或者说logging schema主要是为crash recovery algorithms服务的，即为了保证事务的ACD特性。crash recovery是通过多种机制协调解决的，这里面包括buffer pool的flush策略，WAL、logging schema和checkpoint。并且，InnoDB采用MV2PL，还通过undo log在MVCC中实现delta storage用于存储行的多版本快照。
+从这里可以看出，日志在事务处理中的重要性。这里的日志主要分为undo log和redo log，undo log在下一章事务中详细介绍，本章聚焦在redo log。
+设计 #  crash recovery algorithms由IBM在90年代发表的一篇ARIES论文提出（Algorithms for Recovery and Isolation Exploiting Semantics）。InnoDB也借鉴了ARIES的思想。思想的核心是利用日志（undo+redo）来实现可恢复性。
+redo log #  redo log是在数据库的运行时，随着数据的更改而产生的变更日志，其目的是两个：
+ 体现数据的变更序 通过变更序持久化的能力，可以让数据库系统在crash recovery后恢复到内存态  因此，我们分别来详细描述如何做到这两点。
+首先是体现数据的变更序。
+在数据库中，数据都是通过page为单位组织的。因此，在体现数据变更的时候，这个变更序首先是page的变更序。并且，在InnoDB中，page被组成成B+ tree结构，因此，还要体现SMO，也就是说，还要考虑一个逻辑操作可能会设计B+ tree的多个页面，以及不同B+ tree之间的操作关系，这个关系的组织通过mini-transaction来实现，即提供原子粒度的一组redo log（只保证forwrd）保证动作-页面的一致性。。这些操作组合起来形成了事务，换句话说，事务中的每个逻辑操作产生了一系列page的变更序列，即一组redo log。
+在整体上，数据库中并发事务之间也需要在整体上进行page排序，这一方面依靠FIX Rules保证page间的并发控制，另一方面B+ tree concurrency control protocol也要从数据结构维度维护并发序，加上MV2PL机制，整体上这个page变更序列就确定了。这个全局page的变更序以一个全局的redo log buffer呈现。
+第二点，持久化实际上就是把redo log biffer sync到持久化存储（磁盘）中，sync到磁盘的时机我们称之为sync point。一般来讲，sync point同时也是事务commit点，即WAL机制（force log at commit），也就是保证事务的所有日志（redo+undo）sync到磁盘完成后，事务提交才真正完成，这意味着sync point = commit point。
+这个sync point也有group commit的体现，每个用户线程在各自事务中的一个逻辑操作通过mini-transaction提交到redo log buffer，然后再在sync point时一起持久化。换句话说，每次sync都会把当前sync point之前的所有redo log都持久化到磁盘，这一组（group）持久化的日志包含了各个事务并发修改的数据。</description>
     </item>
     
     <item>
