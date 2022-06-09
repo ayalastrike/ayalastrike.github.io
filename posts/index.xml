@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Blog on Rick&#39;s Blog</title>
+    <link>https://ayalastrike.github.io/posts/</link>
+    <description>Recent content in Blog on Rick&#39;s Blog</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <lastBuildDate>Mon, 28 Apr 2014 00:00:00 +0000</lastBuildDate><atom:link href="https://ayalastrike.github.io/posts/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Hello, world!</title>
+      <link>https://ayalastrike.github.io/posts/test/</link>
+      <pubDate>Mon, 28 Apr 2014 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/posts/test/</guid>
+      <description>之前的工作积累都记录在confluence wiki上，慢慢把资料移到这里方便和大家交流。</description>
+    </item>
+    
+  </channel>
+</rss>
