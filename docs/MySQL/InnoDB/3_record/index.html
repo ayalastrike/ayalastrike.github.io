@@ -37,7 +37,7 @@
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.33d43a632df812121bf9bc5ce1d107a4af10b5a2fbeb043da5ab1415d20197cd.js" integrity="sha256-M9Q6Yy34EhIb&#43;bxc4dEHpK8QtaL76wQ9pasUFdIBl80=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.0779e0877f4989d99ccb68f82be59863dbccd3fe8da16f2829cd29a468861c44.js" integrity="sha256-B3ngh39Jidmcy2j4K&#43;WYY9vM0/6NoW8oKc0ppGiGHEQ=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -117,11 +117,12 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/InnoDB/4_page/">page</a></li>
 <li><a href="/docs/MySQL/InnoDB/5_storage/">storage</a></li>
 <li><a href="/docs/MySQL/InnoDB/6_buffer_pool/">buffer pool</a></li>
-<li><a href="/docs/MySQL/InnoDB/7_b+_tree/">B+ tree</a></li>
-<li><a href="/docs/MySQL/InnoDB/8_change_buffer/">change buffer</a></li>
-<li><a href="/docs/MySQL/InnoDB/9_redo_log/">redo log</a></li>
+<li><a href="/docs/MySQL/InnoDB/7_latch/">latch</a></li>
+<li><a href="/docs/MySQL/InnoDB/8_b+_tree/">B+ tree</a></li>
+<li><a href="/docs/MySQL/InnoDB/9_change_buffer/">change buffer</a></li>
 <li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a></li>
-<li><a href="/docs/MySQL/InnoDB/11_transaction/">transaction</a></li>
+<li><a href="/docs/MySQL/InnoDB/11_redo_log/">redo log</a></li>
+<li><a href="/docs/MySQL/InnoDB/12_transaction/">transaction</a></li>
 </ul>
 </li>
 <li><a href="/docs/MySQL/Replication/">Replication</a></li>
@@ -421,6 +422,16 @@ https://github.com/alex-shpak/hugo-book
 </h1>
 <p>InnoDB中的表使用的是索引组织表（<strong>I</strong>ndex <strong>O</strong>rganized <strong>T</strong>able - IOT），这意味着表中的所有数据是按照B+树的方式进行存储的，行数据存在在B+树的叶子节点上，即使创建表时没有显式指定主键索引，也会自动创建一个6字节的隐藏列，用作主键索引（用于unique）。</p>
 <p>此外，InnoDB为了支持事务和多版本并发控制（MVCC），所以每行记录还有一个回滚指针列和记录事务ID的列，这两列都是隐藏列，对用户不可见。回滚指针用来构造当前记录的上一个版本，实现事务回滚和MVCC，事务ID用于判断当前记录对于其他事务是否可见，用来实现事务的隔离性和MVCC。</p>
+<p>以上三个系统隐藏列仅存在于聚簇索引的物理记录中，逻辑记录不含有这些信息，逻辑记录本身只保存每个元组中的实际内容。</p>
+<p><!-- raw HTML omitted -->物理记录存储在页中，但是每个页存放的行记录也是有硬性定义的，最多允许存放16KB/2-200行的记录，即7992行记录。<!-- raw HTML omitted --></p>
+<blockquote class="book-hint info">
+  <p><!-- raw HTML omitted -->每页最少、最多放多少行</p>
+<p>每个数据页中的行数可以通过以下方式计算：</p>
+<p>row storage layout中的heap_no：13bit，即213=8192，那么16KB的页中每行最少用16*1024/8192 = 2 bytes 存储。</p>
+<p>每行最多有多少列<!-- raw HTML omitted --></p>
+
+</blockquote>
+
 <p>在实际的InnoDB工程实践中，为了存储格式的演进，需要对行格式进行修改。同时，考虑到兼容性（backward、foward），由此提出了named file format的概念。</p>
 <p>InnoDB 1.0.x之前，提供了<strong>Redundant</strong>和<strong>Compact</strong>两种格式来存储行数据：5.0之前的格式是Redundant，5.0引入了Compact，二者也被称为old style和new style，同时又统称为Antelope文件格式。</p>
 <p>InnoDB 1.0.x之后，采用了新的行存储格式（row storage layout），即Barracuda文件格式，新的文件格式兼容之前版本的格式，即包括Antelope文件格式，并加入了2种新的记录存储格式：<strong>Dynamic</strong>（更有效率的off-page column、larger index key prefix（767→ 3072））和支持记录压缩的<strong>Compressed</strong>。</p>

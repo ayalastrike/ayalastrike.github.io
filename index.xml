@@ -16,24 +16,6 @@
     
     <item>
       <title></title>
-      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/10_lock/</link>
-      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
-      
-      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/10_lock/</guid>
-      <description></description>
-    </item>
-    
-    <item>
-      <title></title>
-      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/11_transaction/</link>
-      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
-      
-      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/11_transaction/</guid>
-      <description></description>
-    </item>
-    
-    <item>
-      <title></title>
       <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/2_source/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
@@ -374,15 +356,15 @@ The VIO routines are wrappers for the various network I/O calls that happen with
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/menu/</guid>
-      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning（转）   NET VIO MySQL 8.0 对网络模块的优化（转） MySQL 8.0 通过Resource Group来控制线程计算资源（转） MariaDB MaxScale Proxy Protocol（转） 用户建链（转）   Timeout机制 Thread Pool MDL IO_CACHE 内存管理 信号处理机制 日志 read_only lower_case_table_names Invisible Index   InnoDB  概览 源码结构 record page storage buffer pool B+ tree change buffer redo log lock transaction   Replication    </description>
+      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning（转）   NET VIO MySQL 8.0 对网络模块的优化（转） MySQL 8.0 通过Resource Group来控制线程计算资源（转） MariaDB MaxScale Proxy Protocol（转） 用户建链（转）   Timeout机制 Thread Pool MDL IO_CACHE 内存管理 信号处理机制 日志 read_only lower_case_table_names Invisible Index   InnoDB  概览 源码结构 record page storage buffer pool latch B+ tree change buffer lock redo log transaction   Replication    </description>
     </item>
     
     <item>
       <title>B&#43; tree</title>
-      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/7_b&#43;_tree/</link>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/8_b&#43;_tree/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/7_b&#43;_tree/</guid>
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/8_b&#43;_tree/</guid>
       <description>在InnoDB中，数据的存储组织为IoT，采用B+ tree的数据结构提供高效访问数据的方式（存取路径）。
 在B+ tree实现中，两块内容最为重要，一块是concurrency control，一块是SMO（Struct Modification Operations）。
 演进 #  B+ tree是由二叉查找树、平衡二叉树、B-tree演进而来的。
@@ -420,10 +402,10 @@ spatial control 空间控制
     
     <item>
       <title>change buffer</title>
-      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/8_change_buffer/</link>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/9_change_buffer/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/8_change_buffer/</guid>
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/9_change_buffer/</guid>
       <description>change buffer是InnoDB所特有的，设计思想非常先进，首先详细介绍change buffer的设计机制和实现细节，然后介绍其为了避免死锁所做的考虑。
 设计 #  change buffer目的是减少随机访问磁盘，提升non-unique secondary index（以下简称NUSI）的变更效率，在IO-bound workload下很有必要。
 在InnoDB中，数据顺序存储在clustered index的leaf node，secondary index leaf node则是离散的，因此，对seconary index leaf node的变更操作是随机IO。为了提升secondary index的磁盘IO效率，InnoDB的做法是采用写缓冲机制，将NUSI的变更操作缓冲下来（leaf page oriented），减少随机IO，并在合适的时机将多次对同一页的操作进行merge，这块缓存称为change buffer。
@@ -438,21 +420,43 @@ change buffer也是一颗B+ tree，这颗B+ tree的page也会使用buffer pool�
     </item>
     
     <item>
-      <title>lock</title>
-      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/9_redo_log/</link>
+      <title>latch</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/7_latch/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/9_redo_log/</guid>
-      <description>日志或者说logging schema主要是为crash recovery algorithms服务的，即为了保证事务的ACD特性。crash recovery是通过多种机制协调解决的，这里面包括buffer pool的flush策略，WAL、logging schema和checkpoint。并且，InnoDB采用MV2PL，还通过undo log在MVCC中实现delta storage用于存储行的多版本快照。
-从这里可以看出，日志在事务处理中的重要性。这里的日志主要分为undo log和redo log，undo log在下一章事务中详细介绍，本章聚焦在redo log。
-设计 #  crash recovery algorithms由IBM在90年代发表的一篇ARIES论文提出（Algorithms for Recovery and Isolation Exploiting Semantics）。InnoDB也借鉴了ARIES的思想。思想的核心是利用日志（undo+redo）来实现可恢复性。
-redo log #  redo log是在数据库的运行时，随着数据的更改而产生的变更日志，其目的是两个：
- 体现数据的变更序 通过变更序持久化的能力，可以让数据库系统在crash recovery后恢复到内存态  因此，我们分别来详细描述如何做到这两点。
-首先是体现数据的变更序。
-在数据库中，数据都是通过page为单位组织的。因此，在体现数据变更的时候，这个变更序首先是page的变更序。并且，在InnoDB中，page被组成成B+ tree结构，因此，还要体现SMO，也就是说，还要考虑一个逻辑操作可能会设计B+ tree的多个页面，以及不同B+ tree之间的操作关系，这个关系的组织通过mini-transaction来实现，即提供原子粒度的一组redo log（只保证forwrd）保证动作-页面的一致性。。这些操作组合起来形成了事务，换句话说，事务中的每个逻辑操作产生了一系列page的变更序列，即一组redo log。
-在整体上，数据库中并发事务之间也需要在整体上进行page排序，这一方面依靠FIX Rules保证page间的并发控制，另一方面B+ tree concurrency control protocol也要从数据结构维度维护并发序，加上MV2PL机制，整体上这个page变更序列就确定了。这个全局page的变更序以一个全局的redo log buffer呈现。
-第二点，持久化实际上就是把redo log biffer sync到持久化存储（磁盘）中，sync到磁盘的时机我们称之为sync point。一般来讲，sync point同时也是事务commit点，即WAL机制（force log at commit），也就是保证事务的所有日志（redo+undo）sync到磁盘完成后，事务提交才真正完成，这意味着sync point = commit point。
-这个sync point也有group commit的体现，每个用户线程在各自事务中的一个逻辑操作通过mini-transaction提交到redo log buffer，然后再在sync point时一起持久化。换句话说，每次sync都会把当前sync point之前的所有redo log都持久化到磁盘，这一组（group）持久化的日志包含了各个事务并发修改的数据。</description>
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/7_latch/</guid>
+      <description>latch数据结构 #  先看一下整体的latch数据结构，以及之间的关系：
+下面逐个展开。
+latch基本信息 #  latch ID #  用于标识latch，数据结构为latch_id_t。
+latch ordering #  在数据库中，从狭义视角看，latch用于保护修改的内存对象；从全局视角看，全局操作不同对象也需要遵循特定的顺序，因此有了latching order。数据结构为latch_level_t。
+比如
+enum latch_level_t { ... SYNC_BUF_BLOCK, SYNC_BUF_PAGE_HASH, ... } latch counter #  LatchCounter负责进行latch计数，计数信息包括：spin、waits、calls，并可以动态开启/关闭计数功能（MutexMonitor），也可以通过传入的callback函数用计数值进行运算（比如在innodb中统计latch信息）。
+数据结构说明
+   变量/函数 说明     变量/函数 说明   Count spin waits calls enabled 是否开启计数   vector&amp;lt;Count*&amp;gt; m_counters m_counters   bool m_active 是否开启计数   enable/disable/reset 开启/关闭/重置计数   single_register/single_deregister 注册/注销单例计数器   sum_register/sum_deregister 注册/注销聚合计数器   iterate 迭代计数器，调用callback函数    latch元信息 #  latch元信息由以上3类数据聚合而成（ID、ordering、counter），数据结构为latch_meta_t。</description>
+    </item>
+    
+    <item>
+      <title>lock</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/10_lock/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/10_lock/</guid>
+      <description>在InnoDB中，采用悲观并发控制结合多版本技术，即MV2PL来提供事务的并发控制。并且，通过nextkey locking在RR级别下解决了幻读。最后，InnoDB没有锁升级机制，这得益于其行锁对象及implicit lock的设计。
+1 锁与事务 #  我们在前面谈过latch，并且比较过在并发控制上二者的区别，但是，锁的用途不仅仅如此，锁和事务戚戚相关。
+1.1 隔离性 #  与锁相关的概念有：
+ 并发控制 concurrency control 序列化 serializability 隔离性 isolation  这里用ACID特性中的隔离性（I）来阐述锁。锁是用来实现事务一致性和隔离性的一种常用技术。
+事务的隔离性要求每个读/写事务对象对其他事务的操作可以互相分离，即该事务提交前对其他事务不可见。
+First Law of Concurrency Control ：
+Concurrent execution should not cause application programs to malfunction.
+ 这也是事务隔离性的要求，即当数据库系统中的事务并发运行时，每个事务的运行不会受到其他事务的影响，好像每个并发事务都是&amp;quot;单线程&amp;quot;的在运行。
+实现隔离性有许多种方式，最为广泛使用的就是加锁（locking）技术。不过，即使采用加锁技术，仍然可以有多种实现方式，因此就有了并发控制的第二准则：
+Second Law of Concurrency Control ：
+Concurrent execution should not have lower throughput or much higher response times than serial execution.
+ 如果采用加锁技术实现的数据库并发系统的影响时间大于串行运行的方式，那么这也不是一种能被接受的加锁方式，即并发控制的第二准则要求一种简单的算法或者开销较小的方式来实现加锁技术。
+最简单的加锁技术是对每个要访问的对象加上一个锁。当事务访问一个对象，数据库自动请求并加上一个锁，在事务结束后释放该锁。若请求时该对象上已经被其他事务持有锁，则该事务等待对象上锁的释放。由此可见，锁提供了一种串行机制，用来保证同一时刻一个对象仅能被一个事务访问。
+通过多粒度（fine granular）锁可以用来提高数据库系统的并发性。比如，可以让不同事务访问同一页中的不同记录，从而提高数据库的并发度。
+InnoDB中锁的实现和Oracle数据库非常类似，提供一致性的非锁定读、行级锁支持，但InnoDB中的行级锁没有相关额外的开销，可以在保证数据一致性的基础上同时获得较高的并发性。
+1.2 事务的隔离级别 #  在DBMS发展初期，大部分的数据库系统都没有提供真正的隔离性，最初是因为系统的设计者并没有真正理解这些问题。现在各种读写异常的场景已经清晰，但DBMS需要在正确性和性能之间做出妥协。ISO和ANSI SQL标准制定了四种事务隔离级别的标准，但是很少有数据库厂商遵循这些标准，比如Oracle数据库就不支持READ UNCOMMITTED和REPEATABLE READ的事务隔离级别。</description>
     </item>
     
     <item>
@@ -499,6 +503,24 @@ MySQL大事时间表：
     </item>
     
     <item>
+      <title>redo log</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/11_redo_log/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/11_redo_log/</guid>
+      <description>日志或者说logging schema主要是为crash recovery algorithms服务的，即为了保证事务的ACD特性。crash recovery是通过多种机制协调解决的，这里面包括buffer pool的flush策略，WAL、logging schema和checkpoint。并且，InnoDB采用MV2PL，还通过undo log在MVCC中实现delta storage用于存储行的多版本快照。
+从这里可以看出，日志在事务处理中的重要性。这里的日志主要分为undo log和redo log，undo log在下一章事务中详细介绍，本章聚焦在redo log。crash_recovery在事务一章介绍。
+设计 #  crash recovery algorithms由IBM在90年代发表的一篇ARIES论文提出（Algorithms for Recovery and Isolation Exploiting Semantics）。InnoDB也借鉴了ARIES的思想。思想的核心是利用日志（undo+redo）来实现可恢复性。
+redo log #  redo log是在数据库的运行时，随着数据的更改而产生的变更日志，其目的是两个：
+ 体现数据的变更序 通过变更序持久化的能力，可以让数据库系统在crash recovery后恢复到内存态  因此，我们分别来详细描述如何做到这两点。
+首先是体现数据的变更序。
+在数据库中，数据都是通过page为单位组织的。因此，在体现数据变更的时候，这个变更序首先是page的变更序。并且，在InnoDB中，page被组成成B+ tree结构，因此，还要体现SMO，也就是说，还要考虑一个逻辑操作可能会设计B+ tree的多个页面，以及不同B+ tree之间的操作关系，这个关系的组织通过mini-transaction来实现，即提供原子粒度的一组redo log（只保证forwrd）保证动作-页面的一致性。。这些操作组合起来形成了事务，换句话说，事务中的每个逻辑操作产生了一系列page的变更序列，即一组redo log。
+在整体上，数据库中并发事务之间也需要在整体上进行page排序，这一方面依靠FIX Rules保证page间的并发控制，另一方面B+ tree concurrency control protocol也要从数据结构维度维护并发序，加上MV2PL机制，整体上这个page变更序列就确定了。这个全局page的变更序以一个全局的redo log buffer呈现。
+第二点，持久化实际上就是把redo log biffer sync到持久化存储（磁盘）中，sync到磁盘的时机我们称之为sync point。一般来讲，sync point同时也是事务commit点，即WAL机制（force log at commit），也就是保证事务的所有日志（redo+undo）sync到磁盘完成后，事务提交才真正完成，这意味着sync point = commit point。
+这个sync point也有group commit的体现，每个用户线程在各自事务中的一个逻辑操作通过mini-transaction提交到redo log buffer，然后再在sync point时一起持久化。换句话说，每次sync都会把当前sync point之前的所有redo log都持久化到磁盘，这一组（group）持久化的日志包含了各个事务并发修改的数据。</description>
+    </item>
+    
+    <item>
       <title>storage</title>
       <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/5_storage/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
@@ -522,6 +544,26 @@ fil_system_t、fil_space_t、fil_node_t的关系如图所示：
 表空间 #  首先先让我们从用户和系统管理的角度来了解表空间的使用场景，以便对表空间有一个直观的认识。
 使用场景 #  在MySQL 5.7中，表空间按照使用场景分为五种：
  系统表空间 独立表空间 通用表空间 undo表空间 临时表空间  系统表空间 #  系统表空间位于datadir下，存放了InnoDB存储引擎的核心信息，包括数据字典、事务系统信息、double write buffer、change buffer。如果没有配置独立的undo表空间，则undo日志也存放在这里（临时表空间也是如此）。同样，如果没有开启独立表空间（file-per-table），则用户表的数据和索引也存放在这里。因此，系统表空间也被称为共享表空间。</description>
+    </item>
+    
+    <item>
+      <title>transaction</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/12_transaction/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/12_transaction/</guid>
+      <description>1 事务 #  1.1 概述 #  事务是访问数据库中数据的一个程序执行单元。在一个事务中的操作，要么都做，要么不做，这是事务的目的，也是事务模型区别于文件系统的重要特征之一。
+从理论上来说，事务有着极其严格的定义，必须同时满足ACID四个特性。但是数据库厂商出于各种目的，并没有严格满足事务的ACID标准。比如对于MySQL的NDB Cluster，没有满足D；对于Oracle，默认的事务隔离级别是Read Committed，不满足I。在InnoDB中，默认的事务隔离级别是Read Repeatable，完全遵循和满足事务的ACID特性。
+这里要注意，D保证的是事务系统的高可靠性（High Reliability），而不是高可用性（High Availability）。对于高可用性，事务本身并不能保证，需要一些系统共同配合来完成。
+1.2 分类 #  参见Jim Gray
+1.3 隔离级别 #  令人惊讶的是，大部分数据库系统都没有提供真正的隔离性，最初或许是因为系统实现者并没有真正理解这些问题。如今这些问题已经弄清楚了，但是数据库的实现者在正确性和性能之间做了妥协。ISO和ANSI SQL标准制定了四种事务隔离级别的标准，但是很少有数据库厂商遵循这些标准，比如Oracle不支持Read Uncommitted和Repeatable Read的事务隔离级别。
+SQL标准定义的四个隔离级别为：
+ Read Uncommitted Read Committed Repeatable Read Serializable  SQL和SQL2标准的默认事务隔离级别是Serializable。
+InnoDB支持的默认事务隔离级别是Repeatable Read，但是和SQL标准不同的是，InnoDB在此隔离级别下，通过使用next-key locking算法，避免了幻读的产生，即可以完全保证事务的隔离性要求，达到了SQL标准的Serializable隔离级别。在append-only storage上，采用snapshot isolation也是避免幻读的一种实现方式。
+关于事务可以洋洋洒洒写很多，这里主要聚焦InnoDB中的事务子系统的实现，详细事务的概念和事务控制技术这里略过。
+2 事务子系统 #  事务子系统中的数据包括事务信息、undo log、binlog信息以及doublewrite信息。
+这些信息由trx_sys page牵头，存储在各自的segment中：
+   segment 存储内容 segment header     txn segment 事务信息 trx_sys page   rollback segment undo segment、history链表、undo slots rollback segment page   undo segment undo log undo segment page   doublewrite segment doublewrite数据 trx_sys_page    整体层次如下：</description>
     </item>
     
   </channel>

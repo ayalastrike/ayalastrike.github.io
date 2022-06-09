@@ -51,7 +51,7 @@ fil_system_t、fil_space_t、fil_node_t的关系如图所示：
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.33d43a632df812121bf9bc5ce1d107a4af10b5a2fbeb043da5ab1415d20197cd.js" integrity="sha256-M9Q6Yy34EhIb&#43;bxc4dEHpK8QtaL76wQ9pasUFdIBl80=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.0779e0877f4989d99ccb68f82be59863dbccd3fe8da16f2829cd29a468861c44.js" integrity="sha256-B3ngh39Jidmcy2j4K&#43;WYY9vM0/6NoW8oKc0ppGiGHEQ=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -131,11 +131,12 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/InnoDB/4_page/">page</a></li>
 <li><a href="/docs/MySQL/InnoDB/5_storage/"class=active>storage</a></li>
 <li><a href="/docs/MySQL/InnoDB/6_buffer_pool/">buffer pool</a></li>
-<li><a href="/docs/MySQL/InnoDB/7_b+_tree/">B+ tree</a></li>
-<li><a href="/docs/MySQL/InnoDB/8_change_buffer/">change buffer</a></li>
-<li><a href="/docs/MySQL/InnoDB/9_redo_log/">redo log</a></li>
+<li><a href="/docs/MySQL/InnoDB/7_latch/">latch</a></li>
+<li><a href="/docs/MySQL/InnoDB/8_b+_tree/">B+ tree</a></li>
+<li><a href="/docs/MySQL/InnoDB/9_change_buffer/">change buffer</a></li>
 <li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a></li>
-<li><a href="/docs/MySQL/InnoDB/11_transaction/">transaction</a></li>
+<li><a href="/docs/MySQL/InnoDB/11_redo_log/">redo log</a></li>
+<li><a href="/docs/MySQL/InnoDB/12_transaction/">transaction</a></li>
 </ul>
 </li>
 <li><a href="/docs/MySQL/Replication/">Replication</a></li>
@@ -1248,7 +1249,7 @@ int fallocate(int fd, int mode, off_t offset, off_t len);
   <a class="anchor" href="#%e8%a1%a8%e7%a9%ba%e9%97%b4%e7%9a%84%e7%a3%81%e7%9b%98%e7%bb%84%e7%bb%87%e7%bb%93%e6%9e%84">#</a>
 </h1>
 <p>对于物理文件，内部也需要通过高效的数据组织来有效的利用文件空间。所以，接下来我们深入文件内部，来看一下内部的数据组织形式。</p>
-<p>从上面可以看到，物理文件隶属于不同的表空间，不同的表空间，除了日志表空间外，都有统一的page layout（具有通用的FIL_HEADER和FIL_TRAIL），固定的page size（对于压缩表，可以在建表时指定block size，但在内存中表现的解压页依旧为统一的页大小），并普遍使用B+树来管理数据。</p>
+<p>从上面可以看到，物理文件隶属于不同的表空间，不同的表空间，除了日志表空间外，都有统一的page layout（具有通用的FIL_HEADER和FIL_TRAIL），固定的page size（<!-- raw HTML omitted -->对于压缩表，可以在建表时指定block size，但在内存中表现的解压页依旧为统一的页大小<!-- raw HTML omitted -->），并普遍使用B+树来管理数据。</p>
 <p>在表空间的管理上，首先表空间是由一个或多个物理文件组成的，一个物理文件按照区（extent）来进行管理，区是物理上连续分配的一段空间，由64个页组成，用于存储实际的数据，分配给数据的区逻辑上叫做段（分为non-leaf segment和leaf segment以及碎片页）。</p>
 <blockquote class="book-hint danger">
   <p>日志表空间的log block大小为512字节，这时为了保证日志页写入的原子性。因为现代的存储设备（SSD）中的sector size已经为4K了，所以将log block size对齐到4K可以避免read-modify-write现象。MySQL通过innodb_log_write_ahead_size设置来避免read-modify-write，而Percona则直接设置log block size的值。</p>
