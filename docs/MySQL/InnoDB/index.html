@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="InnoDB存储引擎 #  从InnoDB的发展历史作为起点，了解InnoDB一路走来的历程。
+<meta name="description" content="InnoDB存储引擎 #  从InnoDB的发展历史作为起点，了解InnoDB一路的发展。
 然后在全局视角下先了解整体的模块构成及其功能。
 再按照以下的路径深入细节：
- 概览 源码结构 基本数据结构与算法 os records 索引页 storage management 同步机制 缓冲池 数据字典 B&#43;树索引 change buffer lock 事务处理 mini-transaction redo log 服务管理 row  一路下来，应该已经对各个模块的功能和细节了然于心，然后再回头再重温一下整体架构，做到融会贯通。">
+ record page storage buffer pool latch B&#43; tree change buffer lock redo log transaction  一路下来，应该已经对各个模块的功能和细节了然于心，然后再回头再重温一下整体架构，做到融会贯通。">
 <meta name="theme-color" content="#FFFFFF">
 <meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
 <meta property="og:description" content="" />
@@ -18,7 +18,7 @@
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.0779e0877f4989d99ccb68f82be59863dbccd3fe8da16f2829cd29a468861c44.js" integrity="sha256-B3ngh39Jidmcy2j4K&#43;WYY9vM0/6NoW8oKc0ppGiGHEQ=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.1a18604024768a8dc502de86eaa3bdb8cc9121675eaf14c4bfb1da062074d9b4.js" integrity="sha256-GhhgQCR2io3FAt6G6qO9uMyRIWderxTEv7HaBiB02bQ=" crossorigin="anonymous"></script>
 <link rel="alternate" type="application/rss+xml" href="https://ayalastrike.github.io/docs/MySQL/InnoDB/index.xml" title="Rick's Blog" />
 <!--
 Made with Book Theme
@@ -186,28 +186,20 @@ https://github.com/alex-shpak/hugo-book
   InnoDB存储引擎
   <a class="anchor" href="#innodb%e5%ad%98%e5%82%a8%e5%bc%95%e6%93%8e">#</a>
 </h1>
-<p>从InnoDB的发展历史作为起点，了解InnoDB一路走来的历程。</p>
+<p>从InnoDB的发展历史作为起点，了解InnoDB一路的发展。</p>
 <p>然后在全局视角下先了解整体的模块构成及其功能。</p>
 <p>再按照以下的路径深入细节：</p>
 <ul>
-<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=15040514">概览</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=14221316">源码结构</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=14221324">基本数据结构与算法</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/display/RH/os">os</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/display/RH/records">records</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=17170903">索引页</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/display/RH/storage&#43;management">storage management</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=15040528">同步机制</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=17171137">缓冲池</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=17171029">数据字典</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=17171046">B+树索引</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/display/RH/change&#43;buffer">change buffer</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/display/RH/lock">lock</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=17171150">事务处理</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/display/RH/mini-transaction">mini-transaction</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/display/RH/redo&#43;log">redo log</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/pages/viewpage.action?pageId=17171164">服务管理</a></li>
-<li><a href="http://ayalastrike.f3322.net:8090/display/RH/row">row</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_page/">page</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_storage/">storage</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_buffer_pool/">buffer pool</a></li>
+<li><a href="/docs/MySQL/InnoDB/7_latch/">latch</a></li>
+<li><a href="/docs/MySQL/InnoDB/8_b+_tree/">B+ tree</a></li>
+<li><a href="/docs/MySQL/InnoDB/9_change_buffer/">change buffer</a></li>
+<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a></li>
+<li><a href="/docs/MySQL/InnoDB/11_redo_log/">redo log</a></li>
+<li><a href="/docs/MySQL/InnoDB/12_transaction/">transaction</a></li>
 </ul>
 <p>一路下来，应该已经对各个模块的功能和细节了然于心，然后再回头再重温一下整体架构，做到融会贯通。</p>
 </article>
