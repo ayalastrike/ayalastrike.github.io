@@ -223,7 +223,10 @@ fil_system_t、fil_space_t、fil_node_t的关系如图所示：
 SQL标准定义的四个隔离级别为：
  Read Uncommitted Read Committed Repeatable Read Serializable  SQL和SQL2标准的默认事务隔离级别是Serializable。
 InnoDB支持的默认事务隔离级别是Repeatable Read，但是和SQL标准不同的是，InnoDB在此隔离级别下，通过使用next-key locking算法，避免了幻读的产生，即可以完全保证事务的隔离性要求，达到了SQL标准的Serializable隔离级别。在append-only storage上，采用snapshot isolation也是避免幻读的一种实现方式。
-关于事务可以洋洋洒洒写很多，这里主要聚焦InnoDB中的事务子系统的实现，详细事务的概念和事务控制技术这里略过。
+这里给读者留一个扩展性的思考：
+采用MV可以实现snapshot isolation进而避免幻读吗？
+InnoDB既然也有采用了MV，不用next-key locking而用Percolator的方式能不能做到？
+ 关于事务可以洋洋洒洒写很多，这里主要聚焦InnoDB中的事务子系统的实现，详细的事务概念和事务控制技术这里略过。
 2 事务子系统 #  事务子系统中的数据包括事务信息、undo log、binlog信息以及doublewrite信息。
 这些信息由trx_sys page牵头，存储在各自的segment中：
    segment 存储内容 segment header     txn segment 事务信息 trx_sys page   rollback segment undo segment、history链表、undo slots rollback segment page   undo segment undo log undo segment page   doublewrite segment doublewrite数据 trx_sys_page    整体层次如下：</description>
