@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="1. 背景 #  我们在线上遇到5.7.26的锁问题，需要解决idle事务长时间挂起的问题。同时也调研了现有的mysql timeout机制，以确保其和现有的timeout机制可以吻合。
+Percona从5.1.59-13.0引入了innodb_kill_idle_transaction，用于解决长事务场景，即对idle事务设定一个超时时间，对超过该时间的事务所在的用户连接进行断开。
+引入该参数也可以防止purge线程的长时间阻塞（长事务会一直保持在活跃状态，则会导致purge长时间的等待，从而导致undo无法清理从而造成磁盘空间的不断增加）。
+在实现上，开始是通过扫描InnoDB事务列表来进行判断的，在Percona Server 5.6.35-80.0则改为判断connection socket read timeout。这样优化的好处是，巡检可能会造成CPU空跑，而基于socket select超时则发生超时才会触发，使代码的运行更有效率。
+另外，percona现在提供了两个参数：innodb_kill_idle_transaction（后者的alias，5.7中已标记为deprecated）和kill_idle_transaction。我们在port时只保留kill_idle_transaction。
+2. 设计 #  复用net_wait_timeout：
+ 处于事务中（SERVER_STATUS_IN_TRANS）&amp; min(kill_idle_transaction, net_wait_timeout) 其他场景还是返回net_wait_timeout  kill_idle_transaction配置项
+   配置项 默认值 值范围     kill_idle_transaction 0（不开启） 0 ~ 1 year    3. 示例 #  1. 验证idle事务的连接会自动kill掉 mysql&gt; show global variables like &#39;%idle%&#39;; &#43;-----------------------&#43;-------&#43; | Variable_name | Value | &#43;-----------------------&#43;-------&#43; | kill_idle_transaction | 10 | &#43;-----------------------&#43;-------&#43; mysql&gt; begin; Query OK, 0 rows affected (0.">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="1. 背景 #  我们在线上遇到5.7.26的锁问题，需要解决idle事务长时间挂起的问题。同时也调研了现有的mysql timeout机制，以确保其和现有的timeout机制可以吻合。
+Percona从5.1.59-13.0引入了innodb_kill_idle_transaction，用于解决长事务场景，即对idle事务设定一个超时时间，对超过该时间的事务所在的用户连接进行断开。
+引入该参数也可以防止purge线程的长时间阻塞（长事务会一直保持在活跃状态，则会导致purge长时间的等待，从而导致undo无法清理从而造成磁盘空间的不断增加）。
+在实现上，开始是通过扫描InnoDB事务列表来进行判断的，在Percona Server 5.6.35-80.0则改为判断connection socket read timeout。这样优化的好处是，巡检可能会造成CPU空跑，而基于socket select超时则发生超时才会触发，使代码的运行更有效率。
+另外，percona现在提供了两个参数：innodb_kill_idle_transaction（后者的alias，5.7中已标记为deprecated）和kill_idle_transaction。我们在port时只保留kill_idle_transaction。
+2. 设计 #  复用net_wait_timeout：
+ 处于事务中（SERVER_STATUS_IN_TRANS）&amp; min(kill_idle_transaction, net_wait_timeout) 其他场景还是返回net_wait_timeout  kill_idle_transaction配置项
+   配置项 默认值 值范围     kill_idle_transaction 0（不开启） 0 ~ 1 year    3. 示例 #  1. 验证idle事务的连接会自动kill掉 mysql&gt; show global variables like &#39;%idle%&#39;; &#43;-----------------------&#43;-------&#43; | Variable_name | Value | &#43;-----------------------&#43;-------&#43; | kill_idle_transaction | 10 | &#43;-----------------------&#43;-------&#43; mysql&gt; begin; Query OK, 0 rows affected (0." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/kill_idle_transaction/" /><meta property="article:section" content="docs" />
+
+
+
+<title>Kill Idle Transaction | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.5145e623761d7b8f5c9bce92d26a14a67e94c255e1e94ee68d160fbf51f8067c.js" integrity="sha256-UUXmI3Yde49cm86S0moUpn6UwlXh6U7mjRYPv1H4Bnw=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning（转）</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化（转）</a></li>
+<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源（转）</a></li>
+<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol（转）</a></li>
+<li><a href="/docs/MySQL/Server/user_connection_handler/">用户建链（转）</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a>
+<ul>
+<li><a href="/docs/MySQL/Server/kill_idle_transaction/"class=active>kill_idle_transaction</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+<li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
+<li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
+<li><a href="/docs/MySQL/Server/memory/">内存管理</a></li>
+<li><a href="/docs/MySQL/Server/signal_handler/">信号处理机制</a></li>
+<li><a href="/docs/MySQL/Server/log/">日志</a></li>
+<li><a href="/docs/MySQL/Server/read_only/">read_only</a></li>
+<li><a href="/docs/MySQL/Server/lower_case_table_names/">lower_case_table_names</a></li>
+<li><a href="/docs/MySQL/Server/invisible_index/">Invisible Index</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">overview</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">source code</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_page/">page</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_storage/">storage</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_buffer_pool/">buffer pool</a></li>
+<li><a href="/docs/MySQL/InnoDB/7_latch/">latch</a></li>
+<li><a href="/docs/MySQL/InnoDB/8_b+_tree/">B+ tree</a></li>
+<li><a href="/docs/MySQL/InnoDB/9_change_buffer/">change buffer</a></li>
+<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/10.1_mysql5.7.26_lock_issue/">MySQL 5.7.26锁问题</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/11_redo_log/">redo log</a></li>
+<li><a href="/docs/MySQL/InnoDB/12_transaction/">transaction</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Replication/">Replication</a></li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="/posts/" >
+        Blog
+      </a>
+  </li>
+  
+  <li>
+    <a href="/about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>Kill Idle Transaction</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#1-背景">1. 背景</a></li>
+    <li><a href="#2-设计">2. 设计</a></li>
+    <li><a href="#3-示例">3. 示例</a></li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><h1 id="1-背景">
+  1. 背景
+  <a class="anchor" href="#1-%e8%83%8c%e6%99%af">#</a>
+</h1>
+<p>我们在线上遇到<a href="https://ayalastrike.github.io/docs/MySQL/InnoDB/10.1_mysql5.7.26_lock_issue/">5.7.26的锁问题</a>，需要解决idle事务长时间挂起的问题。同时也调研了现有的<a href="https://ayalastrike.github.io/docs/MySQL/Server/timeout/">mysql timeout机制</a>，以确保其和现有的timeout机制可以吻合。</p>
+<p>Percona从5.1.59-13.0引入了innodb_kill_idle_transaction，用于解决长事务场景，即对idle事务设定一个超时时间，对超过该时间的事务所在的用户连接进行断开。</p>
+<p>引入该参数也可以防止purge线程的长时间阻塞（长事务会一直保持在活跃状态，则会导致purge长时间的等待，从而导致undo无法清理从而造成磁盘空间的不断增加）。</p>
+<p>在实现上，开始是通过扫描InnoDB事务列表来进行判断的，在Percona Server 5.6.35-80.0则改为判断connection socket read timeout。这样优化的好处是，巡检可能会造成CPU空跑，而基于socket select超时则发生超时才会触发，使代码的运行更有效率。</p>
+<p>另外，percona现在提供了两个参数：innodb_kill_idle_transaction（后者的alias，5.7中已标记为deprecated）和kill_idle_transaction。我们在port时只保留kill_idle_transaction。</p>
+<h1 id="2-设计">
+  2. 设计
+  <a class="anchor" href="#2-%e8%ae%be%e8%ae%a1">#</a>
+</h1>
+<p>复用net_wait_timeout：</p>
+<ul>
+<li>处于事务中（SERVER_STATUS_IN_TRANS）&amp; min(kill_idle_transaction, net_wait_timeout)</li>
+<li>其他场景还是返回net_wait_timeout</li>
+</ul>
+<p>kill_idle_transaction配置项</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">配置项</th>
+<th style="text-align:left">默认值</th>
+<th style="text-align:left">值范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">kill_idle_transaction</td>
+<td style="text-align:left">0（不开启）</td>
+<td style="text-align:left">0 ~ 1 year</td>
+</tr>
+</tbody>
+</table>
+<h1 id="3-示例">
+  3. 示例
+  <a class="anchor" href="#3-%e7%a4%ba%e4%be%8b">#</a>
+</h1>
+<pre><code>1. 验证idle事务的连接会自动kill掉
+mysql&gt; show global variables like '%idle%';
++-----------------------+-------+
+| Variable_name         | Value |
++-----------------------+-------+
+| kill_idle_transaction | 10    |
++-----------------------+-------+
+  
+mysql&gt; begin;
+Query OK, 0 rows affected (0.00 sec)
+  
+mysql&gt; select * from t1;
++------+
+| id   |
++------+
+|    1 |
+|    2 |
+|    3 |
++------+
+3 rows in set (0.01 sec)
+  
+// 等待15s
+  
+mysql&gt; select * from t1;
+ERROR 2006 (HY000): MySQL server has gone away
+No connection. Trying to reconnect...
+Connection id:    8
+Current database: tjw
+  
++------+
+| id   |
++------+
+|    1 |
+|    2 |
+|    3 |
++------+
+3 rows in set (0.01 sec)
+  
+mysql&gt; show processlist;
++----+------+-----------+------+---------+------+----------+------------------+
+| Id | User | Host      | db   | Command | Time | State    | Info             |
++----+------+-----------+------+---------+------+----------+------------------+
+|  5 | root | localhost | tjw  | Sleep   |   10 |          | NULL             |
+|  6 | root | localhost | NULL | Query   |    0 | starting | show processlist |
+|  7 | root | localhost | NULL | Sleep   |   40 |          | NULL             |
++----+------+-----------+------+---------+------+----------+------------------+
+3 rows in set (0.00 sec)
+  
+15s后连接断开
+  
+mysql&gt; show processlist;
++----+------+-----------+------+---------+------+----------+------------------+
+| Id | User | Host      | db   | Command | Time | State    | Info             |
++----+------+-----------+------+---------+------+----------+------------------+
+|  6 | root | localhost | NULL | Query   |    0 | starting | show processlist |
+|  7 | root | localhost | NULL | Sleep   |   41 |          | NULL             |
++----+------+-----------+------+---------+------+----------+------------------+
+2 rows in set (0.00 sec)
+  
+2. 变量是global级别，不支持设置session级别
+mysql&gt; set session kill_idle_transaction = 20;
+ERROR 1229 (HY000): Variable 'kill_idle_transaction' is a GLOBAL variable and should be set with SET GLOBAL
+  
+3. auto_commit=1的事务不受影响，不会断开
+mysql&gt; show global variables like 'autocommit';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| autocommit    | ON    |
++---------------+-------+
+  
+mysql&gt; select * from t1;
++------+
+| id   |
++------+
+|    1 |
+|    2 |
+|    3 |
++------+
+3 rows in set (0.00 sec)
+  
+// 等待30s
+  
+mysql&gt; select * from t1;
++------+
+| id   |
++------+
+|    1 |
+|    2 |
+|    3 |
++------+
+3 rows in set (0.00 sec)
+  
+mysql&gt; show processlist;
++----+------+-----------+------+---------+------+----------+------------------+
+| Id | User | Host      | db   | Command | Time | State    | Info             |
++----+------+-----------+------+---------+------+----------+------------------+
+|  6 | root | localhost | NULL | Query   |    0 | starting | show processlist |
+|  7 | root | localhost | NULL | Sleep   | 1905 |          | NULL             |
+| 10 | root | localhost | tjw  | Sleep   |   29 |          | NULL             |
++----+------+-----------+------+---------+------+----------+------------------+
+</code></pre><p>5.7.26 锁问题</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">kill_idle_transaction</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">session A</td>
+<td>session B</td>
+</tr>
+<tr>
+<td style="text-align:center">begin;insert into t values (3, &lsquo;A&rsquo;);ERROR 1062 (23000): Duplicate entry &lsquo;A&rsquo; for key &lsquo;name&rsquo;</td>
+<td></td>
+</tr>
+<tr>
+<td style="text-align:center"></td>
+<td>insert into t values (3, &lsquo;Z&rsquo;);waiting&hellip;</td>
+</tr>
+<tr>
+<td style="text-align:center">util kill_idle_transactiontransaction is killed by MySQL事务自动中止ERROR 2006 (HY000): MySQL server has gone away No connection. Trying to reconnect&hellip; Connection id: 16 Current database: tjwERROR 1062 (23000): Duplicate entry &lsquo;3&rsquo; for key &lsquo;PRIMARY&rsquo;</td>
+<td></td>
+</tr>
+<tr>
+<td style="text-align:center"></td>
+<td>Query OK, 1 row affected (5.44 sec) mysql&gt; select * from t; +&mdash;-+&mdash;&mdash;+ | id | name | +&mdash;-+&mdash;&mdash;+ | 1 | A | | 2 | B | | 3 | Z | +&mdash;-+&mdash;&mdash;+ 3 rows in set (0.00 sec)</td>
+</tr>
+</tbody>
+</table>
+<pre><code>mysql&gt; show processlist;
++----+------+-----------+------+---------+------+----------+-------------------------------+
+| Id | User | Host      | db   | Command | Time | State    | Info                          |
++----+------+-----------+------+---------+------+----------+-------------------------------+
+| 11 | root | localhost | NULL | Query   |    0 | starting | show processlist              |
+| 14 | root | localhost | tjw  | Query   |   14 | update   | insert into t values (3, 'Z') |
+| 15 | root | localhost | tjw  | Sleep   |   20 |          | NULL                          |
++----+------+-----------+------+---------+------+----------+-------------------------------+
+3 rows in set (0.00 sec)
+ 
+mysql&gt; show processlist;
++----+------+-----------+------+---------+------+----------+------------------+
+| Id | User | Host      | db   | Command | Time | State    | Info             |
++----+------+-----------+------+---------+------+----------+------------------+
+| 11 | root | localhost | NULL | Query   |    0 | starting | show processlist |
+| 14 | root | localhost | tjw  | Sleep   |   14 |          | NULL             |
++----+------+-----------+------+---------+------+----------+------------------+
+2 rows in set (0.00 sec)
+</code></pre></article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#1-背景">1. 背景</a></li>
+    <li><a href="#2-设计">2. 设计</a></li>
+    <li><a href="#3-示例">3. 示例</a></li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

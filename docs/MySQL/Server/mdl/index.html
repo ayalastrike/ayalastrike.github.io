@@ -37,7 +37,7 @@ Scalability for InnoDB tables was improved by avoiding THR_LOCK locks." />
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.6a5a4d6fe24736cfc4f5220ebc4fae083b5763c0f43225964d1f9e2a60535079.js" integrity="sha256-alpNb&#43;JHNs/E9SIOvE&#43;uCDtXY8D0MiWWTR&#43;eKmBTUHk=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.5145e623761d7b8f5c9bce92d26a14a67e94c255e1e94ee68d160fbf51f8067c.js" integrity="sha256-UUXmI3Yde49cm86S0moUpn6UwlXh6U7mjRYPv1H4Bnw=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -97,7 +97,11 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/Server/user_connection_handler/">用户建链（转）</a></li>
 </ul>
 </li>
-<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a>
+<ul>
+<li><a href="/docs/MySQL/Server/kill_idle_transaction/">kill_idle_transaction</a></li>
+</ul>
+</li>
 <li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
 <li><a href="/docs/MySQL/Server/mdl/"class=active>MDL</a></li>
 <li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
@@ -120,7 +124,11 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/InnoDB/7_latch/">latch</a></li>
 <li><a href="/docs/MySQL/InnoDB/8_b+_tree/">B+ tree</a></li>
 <li><a href="/docs/MySQL/InnoDB/9_change_buffer/">change buffer</a></li>
-<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a></li>
+<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/10.1_mysql5.7.26_lock_issue/">MySQL 5.7.26锁问题</a></li>
+</ul>
+</li>
 <li><a href="/docs/MySQL/InnoDB/11_redo_log/">redo log</a></li>
 <li><a href="/docs/MySQL/InnoDB/12_transaction/">transaction</a></li>
 </ul>
@@ -292,11 +300,13 @@ Multiple-table updates now will block and be blocked by concurrent LOCK TABLES &
 <li>granted read/write</li>
 <li>waiting read/write</li>
 </ul>
-<p>如下：
-• Current read-lock queue (lock-&gt;read)
-• Pending read-lock queue (lock-&gt;read_wait)
-• Current write-lock queue (lock-&gt;write)
-• Pending write-lock queue (lock-&gt;write_wait)</p>
+<p>如下：</p>
+<ul>
+<li>Current read-lock queue (lock-&gt;read)</li>
+<li>Pending read-lock queue (lock-&gt;read_wait)</li>
+<li>Current write-lock queue (lock-&gt;write)</li>
+<li>Pending write-lock queue (lock-&gt;write_wait)</li>
+</ul>
 <p>对于DQL，锁类型一般是TL_READ；对于普通的DML，是TL_WRITE_ALLOW_WRITE</p>
 <p>代码路径：</p>
 <pre><code>lock_tables
@@ -351,8 +361,7 @@ select* from performance_schema.metadata_locks
 <li>不能按同一固定顺序请求锁</li>
 </ul>
 <p>从当前线程开始，转换到全局锁列表，然后在深度遍历，当wait_for和当前THD相同时，形成环；然后递归返回时，通过权重确定victim。</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">
-ctx::find_deadlock
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#000;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">ctx::find_deadlock
     <span style="color:#f00">while</span> (<span style="color:#f60">1</span>) {
         Deadlock_detection_visitor <span style="color:#ff0">dvisitor</span>(<span style="color:#f00">this</span>); <span style="color:#0f0">// ctx
 </span><span style="color:#0f0"></span>        ctx::visit_subgraph();          当前线程是否有锁等待MDL_context::m_waiting_for，有的话就沿着ticket搜下去，没有就退出。
@@ -400,7 +409,7 @@ ctx::find_deadlock
 <li>用户线程根据MDL模块的返回结果，决定继续往下走还是报错退出。</li>
 </ol>
 <blockquote class="book-hint danger">
-  DL锁并不是对表加锁，而是在加表锁前的一个预检查，如果能拿到MDL锁，下一步加相应的表锁。
+  MDL锁并不是对表加锁，而是在加表锁前的一个预检查，如果能拿到MDL锁，下一步加相应的表锁。
 </blockquote>
 
 <p>MDL子系统内部加锁流程</p>
@@ -635,28 +644,7 @@ MDL_key::COMMIT       IX  STMT
 </tr>
 </tbody>
 </table>
-<p>* MDL_INTENTION_EXCLUSIVE IX // 意向X锁，只用于scope 锁</p>
-<p>* MDL_SHARED S // 只能读metadata，当能读写数据，如检查表是否存在时用这个锁</p>
-<p>* MDL_SHARED_HIGH_PRIO SH // 高优先级S锁，可以抢占X锁，只能读metadata，不能读写数据，用于填充INFORMATION_SCHEMA，或者show create table时</p>
-<p>* MDL_SHARED_READ SR // 可以读表数据，select语句，lock table xxx read 都用这个</p>
-<p>* MDL_SHARED_WRITE SW // 可以更新表数据，insert，update，delete，lock table xxx write, select for update，</p>
-<p>* MDL_SHARED_UPGRADABLE SU // 可升级锁，可以升级为SNW或者X锁，ALTER TABLE第一阶段会用到</p>
-<p>* MDL_SHARED_NO_WRITE SNW // 可升级锁，其它线程能读metadata，数据可读不能读，持锁者可以读写，可以升级成X锁，ALTER TABLE的第一阶段</p>
-<p>* MDL_SHARED_NO_READ_WRITE SNRW // 可升级锁，其它线程能读metadata，数据不能读写，持锁者可以读写，可以升级成X锁，LOCK TABLES xxx WRITE</p>
-<p>* MDL_EXCLUSIVE X // 排它锁，禁止其它线程的所有请求，CREATE/DROP/RENAME TABLE</p>
-<ul>
-<li>MDL_INTENTION_EXCLUSIVE(IX) 意向排他锁，锁定一个范围，用在GLOBAL/SCHEMA/COMMIT粒度。</li>
-<li>MDL_SHARED(S) 用在只访问元数据信息，不访问数据。例如CREATE TABLE t LIKE t1;</li>
-<li>MDL_SHARED_HIGH_PRIO(SH) 也是用于只访问元数据信息，但是优先级比排他锁高，用于访问information_schema的表。例如：select * from information_schema.tables;</li>
-<li>MDL_SHARED_READ(SR) 访问表结构并且读表数据，例如：SELECT * FROM t1; LOCK TABLE t1 READ LOCAL;</li>
-<li>MDL_SHARED_WRITE(SW) 访问表结构且写表数据， 例如：INSERT/DELETE/UPDATE t1 … ;SELECT * FROM t1 FOR UPDATE;LOCK TALE t1 WRITE</li>
-<li>MDL_SHARED_WRITE_LOW_PRIO(SWLP) 优先级低于MDL_SHARED_READ_ONLY。语句INSER/DELETE/UPDATE LOW_PRIORITY t1 …; LOCK TABLE t1 WRITE LOW_PRIORITY。</li>
-<li>MDL_SHARED_UPGRADABLE(SU) 可升级锁，允许并发update/read表数据。持有该锁可以同时读取表metadata和表数据，但不能修改数据。可以升级到SNW、SNR、X锁。用在alter table的第一阶段，使alter table的时候不阻塞DML，防止其他DDL。</li>
-<li>MDL_SHARED_READ_ONLY(SRO) 持有该锁可读取表数据，同时阻塞所有表结构和表数据的修改操作，用于LOCK TABLE t1 READ。</li>
-<li>MDL_SHARED_NO_WRITE(SNW) 持有该锁可以读取表metadata和表数据，同时阻塞所有的表数据修改操作，允许读。可以升级到X锁。用在ALTER TABLE第一阶段，拷贝原始表数据到新表，允许读但不允许更新。</li>
-<li>MDL_SHARED_NO_READ_WRITE(SNRW) 可升级锁，允许其他连接读取表结构但不可以读取数据，阻塞所有表数据的读写操作，允许INFORMATION_SCHEMA访问和SHOW语句。持有该锁的的连接可以读取表结构，修改和读取表数据。可升级为X锁。使用在LOCK TABLE WRITE语句。</li>
-<li>MDL_EXCLUSIVE(X) 排他锁，持有该锁连接可以修改表结构和表数据，使用在CREATE/DROP/RENAME/ALTER TABLE 语句。</li>
-</ul>
+<p>略</p>
 <p>duration表示MDL锁的持有时长，enum_mdl_duration</p>
 <table>
 <thead>
@@ -830,44 +818,6 @@ find_deadlock                               检测是否有死锁
 visit_subgraph                              和死锁检测相关
 </code></pre><p>acquire_locks：一次性申请多个X锁，要么全部成功要么全部失败，用于RENAME, DROP和其他DDL语句
 如果后续的锁grant失败，会通过savepoint将前面已经申请到的锁也rollback。</p>
-<p>比如drop table test.t1这个DDL会一次加3个锁：</p>
-<ol>
-<li>GLOBAL，MDL_INTENTION_EXCLUSIVE</li>
-<li>test 库, MDL_INTENTION_EXCLUSIVE</li>
-<li>test.t1 表，MDL_EXCLUSIVE</li>
-</ol>
-<p>MDL_context::acquire_lock</p>
-<p>主加锁函数，调试MDL锁相关问题时，给这个函数加断点比较有效。先调用MDL_context::try_acquire_lock_impl，如果加锁失败就进入等待加锁逻辑：</p>
-<ol>
-<li>将MDL_context::try_acquire_lock_impl返回的ticket放进MDL_lock的等待队列</li>
-<li>触发一次死锁检测</li>
-<li>进入等待，等待又分为2种：
-<ol>
-<li>定时检查等待: 如果当前请求的锁是比较高级的（对于MDL_object_lock是比MDL_SHARED_NO_WRITE类型更高，对于MDL_scoped_lock是MDL_SHARED类型），就会每秒给其它持有当前锁的线程（并且这些连接持有的锁等级比较低）发信号，通知其释放锁，然后再检查是否锁已拿到</li>
-<li>一直等待，直到超时</li>
-</ol>
-</li>
-<li>检查步骤3的等待结果，可以是GRANTED（拿到锁）、VICTIM（被死锁检测算法选为受害者）、TIMEOUT（加锁超时）、KILLED（连接被kill）。拿到锁返回成功，其它返回失败</li>
-</ol>
-<p>MDL_context::upgrade_shared_lock</p>
-<p>锁升级，从共享锁升级到互斥锁，实现方式是重新申请一个目标锁，拿到新的ticket后替换老的ticket，用在alter table和create table场景中。</p>
-<p>如create table test.t1(id int) engine = innodb，会先拿test.t1的MDL_SHARED共享锁，检查表是否存在，如果不存在就把锁升级到MDL_EXCLUSIVE锁，然后开始建表。</p>
-<p>对于alter table test.t1 add column name varchar(10), algorithm=copy;，alter用copy到临时的方式来做。整个过程中MDL顺序是这样的：</p>
-<ol>
-<li>刚开始打开表的时候，用的是 MDL_SHARED_UPGRADABLE 锁；</li>
-<li>拷贝到临时表过程中，需要升级到 MDL_SHARED_NO_WRITE 锁，这个时候其它连接可以读，不能更新；</li>
-<li>拷贝完在交换表的时候，需要升级到是MDL_EXCLUSIVE，这个时候是禁止读写的。</li>
-</ol>
-<p>所以在用copy算法alter表过程中，会有2次锁升级。</p>
-<p>MDL_ticket::downgrade_lock 和MDL_context::upgrade_shared_lock对应的锁降级，从互斥锁降级到共享锁，实现比较简单，直接把锁类型改为目标类型（不用重新申请）。</p>
-<p>对于alter table test.t1 add column name varchar(10), algorithm=inplace，如果alter使用inplace算法的话，整个过程中MDL加锁顺序是这样的：</p>
-<ol>
-<li>和copy算法一样，刚开始打开表的时候，用的是 MDL_SHARED_UPGRADABLE 锁；</li>
-<li>在prepare前，升级到MDL_EXCLUSIVE锁；</li>
-<li>在prepare后，降级到MDL_SHARED_UPGRADABLE（其它线程可以读写）或者MDL_SHARED_NO_WRITE（其它线程只能读不能写），降级到哪种由表的引擎决定；</li>
-<li>在alter结束后，commit前，升级到MDL_EXCLUSIVE锁，然后commit。</li>
-</ol>
-<p>可以看到inplace有2次锁升级，1次降级，不过在alter最耗时的阶段是有可能降级到MDL_SHARED_UPGRADABLE的，对其它线程的影响小。</p>
 <h3 id="mdl_request">
   MDL_request
   <a class="anchor" href="#mdl_request">#</a>
@@ -1009,8 +959,8 @@ m_trans_ticket  指向创建savepoint前的最后一个stmt ticket
 <li>GLOBAL+S+EXPLICIT（通过Global_read_lock::lock_global_read_lock）</li>
 <li>COMMIT+S+EXPLICIT（通过Global_read_lock::make_global_read_lock_block_commit）</li>
 </ul>
-<p>并清空表缓存（逼迫更新表元信息必须先走open table获取GLOBAL+IX+STMT），以及其他元信息更新入口
-阻止元数据修改和表数据更改（S和IX不兼容）：</p>
+<p>并清空表缓存（逼迫更新表元信息必须先走open table获取GLOBAL+IX+STMT），以及其他元信息更新入口</p>
+<p>阻止元数据修改和表数据更改（S和IX不兼容）：</p>
 <ul>
 <li>更新表元信息必须先走open table获取GLOBAL+IX+STMT）</li>
 <li>事务和xa事务提交（数据变更，写入binlog先获取COMMIT+IX+STMT）</li>
@@ -1058,10 +1008,7 @@ xa_transaction xa事务提交
     prepare                                             COMMIT+IX+STMT
     commit                                              COMMIT+IX+STMT
     rollback                                            COMMIT+IX+STMT
-</code></pre><p>TODO:</p>
-<p>FAST PATH（unobtrusive） OR SLOW PATH（obtrusive）</p>
-<p>LF_HASH</p>
-</article>
+</code></pre></article>
  
       
 

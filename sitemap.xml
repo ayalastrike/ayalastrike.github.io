@@ -23,6 +23,8 @@
     <loc>https://ayalastrike.github.io/about/</loc>
     <lastmod>2022-05-13T16:16:17+08:00</lastmod>
   </url><url>
+    <loc>https://ayalastrike.github.io/docs/MySQL/InnoDB/10.1_mysql5.7.26_lock_issue/</loc>
+  </url><url>
     <loc>https://ayalastrike.github.io/docs/MySQL/InnoDB/2_source/</loc>
     <lastmod>2022-06-09T15:31:10+08:00</lastmod>
   </url><url>
@@ -49,6 +51,8 @@
   </url><url>
     <loc>https://ayalastrike.github.io/docs/MySQL/Server/io_cache/</loc>
     <lastmod>2022-05-17T11:37:25+08:00</lastmod>
+  </url><url>
+    <loc>https://ayalastrike.github.io/docs/MySQL/Server/kill_idle_transaction/</loc>
   </url><url>
     <loc>https://ayalastrike.github.io/docs/MySQL/Server/log/</loc>
     <lastmod>2022-05-18T22:25:02+08:00</lastmod>

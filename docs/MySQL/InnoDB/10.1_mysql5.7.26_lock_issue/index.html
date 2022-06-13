@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="线上问题 #  在MySQL 5.7.26中，线上遇到如下问题：
+在insert时出现大量的用户线程等待，经排查dbproxy查询日志，发现所有的用户线程都在等待这个insert释放锁：
+insert into account_m.transaction_bill_493 (transaction_id,transaction_type,business_type,amount,user_id,user_name,user_phone,partner_id,account_type,partner_user_id,partner_user_name,partner_user_phone,partner_partner_id,partner_account_type,product_line,status,create_time,freeze_time,rollback_time,commit_time,refund_time,remark,extra_field, refund_amount,origin_transaction,transaction_desc,order_amount,account_id,sub_type,partner_account_id,partner_sub_type, currency,attach) values (&lsquo;251_202103112460775602597789&rsquo;,3,&#39;&#39;,200,&lsquo;10811426065435&rsquo;,&#39;&#39;,&#39;&#39;,&lsquo;2510000000&rsquo;,4,&lsquo;17593398603669&rsquo;,&#39;&#39;,&#39;&#39;,&#39;&#39;,1,251,3,&lsquo;2021-03-11 12:18:57&rsquo;,&lsquo;1970-01-01 08:00:00&rsquo;,&lsquo;1970-01-01 08:00:00&rsquo;,&lsquo;2021-03-11 12:18:57&rsquo;,&lsquo;1970-01-01 08:00:00&rsquo;,&#39;&#39;,&#39;&#39;, 0,&#39;&#39;,&#39;{&ldquo;title&rdquo;:&quot;&quot;,&ldquo;subTitle&rdquo;:&quot;&quot;}&#39;,0,&lsquo;10000400006810811426065435&rsquo;,100,&lsquo;10000100000017593398603669&rsquo;,100,0,&#39;&#39;)
+account_m.transaction_bill_493表结构如下：
+CREATE TABLE `transaction_bill_493` ( `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT &#39;自增主键&#39;, `transaction_type` tinyint(4) unsigned NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;交易类型&#39;, `transaction_id` varchar(64) NOT NULL COMMENT &#39;交易ID，外部传入&#39;, `amount` bigint(20) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;金额&#39;, `refund_amount` bigint(20) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;退款金额&#39;, `origin_transaction` varchar(64) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;退款时使用，原始订单，id|type|partner_id&#39;, `user_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;用户ID&#39;, `user_name` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;用户姓名&#39;, `user_phone` varchar(16) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;用户电话&#39;, `partner_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;商户ID&#39;, `account_type` tinyint(3) unsigned NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;账户类型&#39;, `partner_user_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易对象ID&#39;, `partner_user_name` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易对象姓名&#39;, `partner_user_phone` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易对象电话&#39;, `partner_partner_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易对象商户ID&#39;, `partner_account_type` tinyint(3) unsigned NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;交易对象类型&#39;, `product_line` smallint(6) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;产品线ID&#39;, `status` tinyint(4) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;状态（1完成；2冻结；3：解冻；）&#39;, `create_time` datetime DEFAULT NULL COMMENT &#39;记录生成时间&#39;, `freeze_time` datetime DEFAULT NULL COMMENT &#39;&gt;冻结时间&#39;, `rollback_time` datetime DEFAULT NULL COMMENT &#39;解冻时间&#39;, `commit_time` datetime DEFAULT NULL COMMENT &#39;扣款时间&#39;, `refund_time` datetime DEFAULT NULL COMMENT &#39;退款时间&#39;, `remark` varchar(2048) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;备注&#39;, `extra_field` varchar(64) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;扩展字段&#39;, `transaction_desc` varchar(256) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易描述&#39;, `order_amount` bigint(20) unsigned NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;订单金额分&#39;, `account_id` varchar(64) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;è´¦æˆ- ID&#39;, `sub_type` int(11) NOT NULL DEFAULT &#39;100&#39; COMMENT &#39;账户类型，默认是可用资金账户类型&#39;, `partner_account_id` varchar(64) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;partner账户ID&#39;, `partner_sub_type` int(11) NOT NULL DEFAULT &#39;100&#39; COMMENT &#39;partner账户类型，默认是可用资金账户类型&#39;, `out_order_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;外部订单ID&#39;, `bank_card` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;银行卡号&#39;, `business_type` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;业务类型&#39;, `currency` int(11) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;币种&#39;, `attach` varchar(2048) CHARACTER SET utf8 COLLATE utf8_bin NOT NULL DEFAULT &#39;&#39; COMMENT &#39;扩展字段, 存储业务透传信息&#39;, PRIMARY KEY (`id`), UNIQUE KEY `uk_transid_accountid` (`transaction_id`,`account_id`), KEY `idx_user_id` (`user_id`), KEY `idx_create_time` (`create_time`), KEY `idx_status_freeze_time` (`status`,`freeze_time`), KEY `idx_status_commit_time` (`status`,`commit_time`), KEY `idx_freeze_time` (`freeze_time`), KEY `idx_accountid` (`account_id`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT=&#39;交易单表&#39; 事后经过复盘，线上当时发生问题时，业务显式开启事务后，由于业务代码出现夯死没有发送commit，从而导致该insert事务一直持有锁而出现大量的用户线程等待。">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="线上问题 #  在MySQL 5.7.26中，线上遇到如下问题：
+在insert时出现大量的用户线程等待，经排查dbproxy查询日志，发现所有的用户线程都在等待这个insert释放锁：
+insert into account_m.transaction_bill_493 (transaction_id,transaction_type,business_type,amount,user_id,user_name,user_phone,partner_id,account_type,partner_user_id,partner_user_name,partner_user_phone,partner_partner_id,partner_account_type,product_line,status,create_time,freeze_time,rollback_time,commit_time,refund_time,remark,extra_field, refund_amount,origin_transaction,transaction_desc,order_amount,account_id,sub_type,partner_account_id,partner_sub_type, currency,attach) values (&lsquo;251_202103112460775602597789&rsquo;,3,&#39;&#39;,200,&lsquo;10811426065435&rsquo;,&#39;&#39;,&#39;&#39;,&lsquo;2510000000&rsquo;,4,&lsquo;17593398603669&rsquo;,&#39;&#39;,&#39;&#39;,&#39;&#39;,1,251,3,&lsquo;2021-03-11 12:18:57&rsquo;,&lsquo;1970-01-01 08:00:00&rsquo;,&lsquo;1970-01-01 08:00:00&rsquo;,&lsquo;2021-03-11 12:18:57&rsquo;,&lsquo;1970-01-01 08:00:00&rsquo;,&#39;&#39;,&#39;&#39;, 0,&#39;&#39;,&#39;{&ldquo;title&rdquo;:&quot;&quot;,&ldquo;subTitle&rdquo;:&quot;&quot;}&#39;,0,&lsquo;10000400006810811426065435&rsquo;,100,&lsquo;10000100000017593398603669&rsquo;,100,0,&#39;&#39;)
+account_m.transaction_bill_493表结构如下：
+CREATE TABLE `transaction_bill_493` ( `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT &#39;自增主键&#39;, `transaction_type` tinyint(4) unsigned NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;交易类型&#39;, `transaction_id` varchar(64) NOT NULL COMMENT &#39;交易ID，外部传入&#39;, `amount` bigint(20) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;金额&#39;, `refund_amount` bigint(20) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;退款金额&#39;, `origin_transaction` varchar(64) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;退款时使用，原始订单，id|type|partner_id&#39;, `user_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;用户ID&#39;, `user_name` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;用户姓名&#39;, `user_phone` varchar(16) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;用户电话&#39;, `partner_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;商户ID&#39;, `account_type` tinyint(3) unsigned NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;账户类型&#39;, `partner_user_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易对象ID&#39;, `partner_user_name` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易对象姓名&#39;, `partner_user_phone` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易对象电话&#39;, `partner_partner_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易对象商户ID&#39;, `partner_account_type` tinyint(3) unsigned NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;交易对象类型&#39;, `product_line` smallint(6) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;产品线ID&#39;, `status` tinyint(4) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;状态（1完成；2冻结；3：解冻；）&#39;, `create_time` datetime DEFAULT NULL COMMENT &#39;记录生成时间&#39;, `freeze_time` datetime DEFAULT NULL COMMENT &#39;&gt;冻结时间&#39;, `rollback_time` datetime DEFAULT NULL COMMENT &#39;解冻时间&#39;, `commit_time` datetime DEFAULT NULL COMMENT &#39;扣款时间&#39;, `refund_time` datetime DEFAULT NULL COMMENT &#39;退款时间&#39;, `remark` varchar(2048) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;备注&#39;, `extra_field` varchar(64) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;扩展字段&#39;, `transaction_desc` varchar(256) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易描述&#39;, `order_amount` bigint(20) unsigned NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;订单金额分&#39;, `account_id` varchar(64) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;è´¦æˆ- ID&#39;, `sub_type` int(11) NOT NULL DEFAULT &#39;100&#39; COMMENT &#39;账户类型，默认是可用资金账户类型&#39;, `partner_account_id` varchar(64) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;partner账户ID&#39;, `partner_sub_type` int(11) NOT NULL DEFAULT &#39;100&#39; COMMENT &#39;partner账户类型，默认是可用资金账户类型&#39;, `out_order_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;外部订单ID&#39;, `bank_card` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;银行卡号&#39;, `business_type` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;业务类型&#39;, `currency` int(11) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;币种&#39;, `attach` varchar(2048) CHARACTER SET utf8 COLLATE utf8_bin NOT NULL DEFAULT &#39;&#39; COMMENT &#39;扩展字段, 存储业务透传信息&#39;, PRIMARY KEY (`id`), UNIQUE KEY `uk_transid_accountid` (`transaction_id`,`account_id`), KEY `idx_user_id` (`user_id`), KEY `idx_create_time` (`create_time`), KEY `idx_status_freeze_time` (`status`,`freeze_time`), KEY `idx_status_commit_time` (`status`,`commit_time`), KEY `idx_freeze_time` (`freeze_time`), KEY `idx_accountid` (`account_id`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT=&#39;交易单表&#39; 事后经过复盘，线上当时发生问题时，业务显式开启事务后，由于业务代码出现夯死没有发送commit，从而导致该insert事务一直持有锁而出现大量的用户线程等待。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/InnoDB/10.1_mysql5.7.26_lock_issue/" /><meta property="article:section" content="docs" />
+
+
+
+<title>10.1 Mysql5.7.26 Lock Issue | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.5145e623761d7b8f5c9bce92d26a14a67e94c255e1e94ee68d160fbf51f8067c.js" integrity="sha256-UUXmI3Yde49cm86S0moUpn6UwlXh6U7mjRYPv1H4Bnw=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning（转）</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化（转）</a></li>
+<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源（转）</a></li>
+<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol（转）</a></li>
+<li><a href="/docs/MySQL/Server/user_connection_handler/">用户建链（转）</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a>
+<ul>
+<li><a href="/docs/MySQL/Server/kill_idle_transaction/">kill_idle_transaction</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+<li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
+<li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
+<li><a href="/docs/MySQL/Server/memory/">内存管理</a></li>
+<li><a href="/docs/MySQL/Server/signal_handler/">信号处理机制</a></li>
+<li><a href="/docs/MySQL/Server/log/">日志</a></li>
+<li><a href="/docs/MySQL/Server/read_only/">read_only</a></li>
+<li><a href="/docs/MySQL/Server/lower_case_table_names/">lower_case_table_names</a></li>
+<li><a href="/docs/MySQL/Server/invisible_index/">Invisible Index</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">overview</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">source code</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_page/">page</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_storage/">storage</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_buffer_pool/">buffer pool</a></li>
+<li><a href="/docs/MySQL/InnoDB/7_latch/">latch</a></li>
+<li><a href="/docs/MySQL/InnoDB/8_b+_tree/">B+ tree</a></li>
+<li><a href="/docs/MySQL/InnoDB/9_change_buffer/">change buffer</a></li>
+<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/10.1_mysql5.7.26_lock_issue/"class=active>MySQL 5.7.26锁问题</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/11_redo_log/">redo log</a></li>
+<li><a href="/docs/MySQL/InnoDB/12_transaction/">transaction</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Replication/">Replication</a></li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="/posts/" >
+        Blog
+      </a>
+  </li>
+  
+  <li>
+    <a href="/about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>10.1 Mysql5.7.26 Lock Issue</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#线上问题">线上问题</a></li>
+    <li><a href="#线下模拟">线下模拟</a></li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><h1 id="线上问题">
+  线上问题
+  <a class="anchor" href="#%e7%ba%bf%e4%b8%8a%e9%97%ae%e9%a2%98">#</a>
+</h1>
+<p>在MySQL 5.7.26中，线上遇到如下问题：</p>
+<p>在insert时出现大量的用户线程等待，经排查dbproxy查询日志，发现所有的用户线程都在等待这个insert释放锁：</p>
+<p>insert into account_m.transaction_bill_493 (<code>transaction_id</code>,<code>transaction_type</code>,<code>business_type</code>,<code>amount</code>,<code>user_id</code>,<code>user_name</code>,<code>user_phone</code>,<code>partner_id</code>,<code>account_type</code>,<code>partner_user_id</code>,<code>partner_user_name</code>,<code>partner_user_phone</code>,<code>partner_partner_id</code>,<code>partner_account_type</code>,<code>product_line</code>,<code>status</code>,<code>create_time</code>,<code>freeze_time</code>,<code>rollback_time</code>,<code>commit_time</code>,<code>refund_time</code>,<code>remark</code>,<code>extra_field</code>, <code>refund_amount</code>,<code>origin_transaction</code>,<code>transaction_desc</code>,<code>order_amount</code>,<code>account_id</code>,<code>sub_type</code>,<code>partner_account_id</code>,<code>partner_sub_type</code>, <code>currency</code>,<code>attach</code>) values (&lsquo;251_202103112460775602597789&rsquo;,3,'',200,&lsquo;10811426065435&rsquo;,'','',&lsquo;2510000000&rsquo;,4,&lsquo;17593398603669&rsquo;,'','','',1,251,3,&lsquo;2021-03-11 12:18:57&rsquo;,&lsquo;1970-01-01 08:00:00&rsquo;,&lsquo;1970-01-01 08:00:00&rsquo;,&lsquo;2021-03-11 12:18:57&rsquo;,&lsquo;1970-01-01 08:00:00&rsquo;,'','', 0,'','{&ldquo;title&rdquo;:&quot;&quot;,&ldquo;subTitle&rdquo;:&quot;&quot;}',0,&lsquo;10000400006810811426065435&rsquo;,100,&lsquo;10000100000017593398603669&rsquo;,100,0,'')</p>
+<p>account_m.transaction_bill_493表结构如下：</p>
+<pre><code>CREATE TABLE `transaction_bill_493` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '自增主键',
+  `transaction_type` tinyint(4) unsigned NOT NULL DEFAULT '0' COMMENT '交易类型',
+  `transaction_id` varchar(64) NOT NULL COMMENT '交易ID，外部传入',
+  `amount` bigint(20) NOT NULL DEFAULT '0' COMMENT '金额',
+  `refund_amount` bigint(20) NOT NULL DEFAULT '0' COMMENT '退款金额',
+  `origin_transaction` varchar(64) NOT NULL DEFAULT '' COMMENT '退款时使用，原始订单，id|type|partner_id',
+  `user_id` varchar(32) NOT NULL DEFAULT '' COMMENT '用户ID',
+  `user_name` varchar(32) NOT NULL DEFAULT '' COMMENT '用户姓名',
+  `user_phone` varchar(16) NOT NULL DEFAULT '' COMMENT '用户电话',
+  `partner_id` varchar(32) NOT NULL DEFAULT '' COMMENT '商户ID',
+  `account_type` tinyint(3) unsigned NOT NULL DEFAULT '0' COMMENT '账户类型',
+  `partner_user_id` varchar(32) NOT NULL DEFAULT '' COMMENT '交易对象ID',
+  `partner_user_name` varchar(32) NOT NULL DEFAULT '' COMMENT '交易对象姓名',
+  `partner_user_phone` varchar(32) NOT NULL DEFAULT '' COMMENT '交易对象电话',
+  `partner_partner_id` varchar(32) NOT NULL DEFAULT '' COMMENT '交易对象商户ID',
+  `partner_account_type` tinyint(3) unsigned NOT NULL DEFAULT '0' COMMENT '交易对象类型',
+  `product_line` smallint(6) NOT NULL DEFAULT '0' COMMENT '产品线ID',
+  `status` tinyint(4) NOT NULL DEFAULT '0' COMMENT '状态（1完成；2冻结；3：解冻；）',
+  `create_time` datetime DEFAULT NULL COMMENT '记录生成时间',
+  `freeze_time` datetime DEFAULT NULL COMMENT '&gt;冻结时间',
+  `rollback_time` datetime DEFAULT NULL COMMENT '解冻时间',
+  `commit_time` datetime DEFAULT NULL COMMENT '扣款时间',
+  `refund_time` datetime DEFAULT NULL COMMENT '退款时间',
+  `remark` varchar(2048) NOT NULL DEFAULT '' COMMENT '备注',
+  `extra_field` varchar(64) NOT NULL DEFAULT '' COMMENT '扩展字段',
+  `transaction_desc` varchar(256) NOT NULL DEFAULT '' COMMENT '交易描述',
+  `order_amount` bigint(20) unsigned NOT NULL DEFAULT '0' COMMENT '订单金额分',
+  `account_id` varchar(64) NOT NULL DEFAULT '' COMMENT 'è´¦æˆ- ID',
+  `sub_type` int(11) NOT NULL DEFAULT '100' COMMENT '账户类型，默认是可用资金账户类型',
+  `partner_account_id` varchar(64) NOT NULL DEFAULT '' COMMENT 'partner账户ID',
+  `partner_sub_type` int(11) NOT NULL DEFAULT '100' COMMENT 'partner账户类型，默认是可用资金账户类型',
+  `out_order_id` varchar(32) NOT NULL DEFAULT '' COMMENT '外部订单ID',
+  `bank_card` varchar(32) NOT NULL DEFAULT '' COMMENT '银行卡号',
+  `business_type` varchar(32) NOT NULL DEFAULT '' COMMENT '业务类型',
+  `currency` int(11) NOT NULL DEFAULT '0' COMMENT '币种',
+  `attach` varchar(2048) CHARACTER SET utf8 COLLATE utf8_bin NOT NULL DEFAULT '' COMMENT '扩展字段, 存储业务透传信息',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_transid_accountid` (`transaction_id`,`account_id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_create_time` (`create_time`),
+  KEY `idx_status_freeze_time` (`status`,`freeze_time`),
+  KEY `idx_status_commit_time` (`status`,`commit_time`),
+  KEY `idx_freeze_time` (`freeze_time`),
+  KEY `idx_accountid` (`account_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='交易单表'
+</code></pre><p>事后经过复盘，线上当时发生问题时，业务显式开启事务后，由于业务代码出现夯死没有发送commit，从而导致该insert事务一直持有锁而出现大量的用户线程等待。</p>
+<p>我们随后在线下模拟了这一故障场景，并分析问题的根本原因。</p>
+<h1 id="线下模拟">
+  线下模拟
+  <a class="anchor" href="#%e7%ba%bf%e4%b8%8b%e6%a8%a1%e6%8b%9f">#</a>
+</h1>
+<p>我们在线下模拟了线上的这一锁等待场景。</p>
+<p>表结构如下：</p>
+<pre><code>create table t (
+    id int not null auto_increment,
+    name varchar(20) not null,
+    primary key (id),
+    unique key (name)
+) engine=innodb;
+ 
+insert into t values (1, 'A');
+insert into t values (2, 'B');
+</code></pre><p>对比MySQL 5.7.19和5.7.26上的行为差异：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">MySQL 5.7.19</th>
+<th style="text-align:center"></th>
+<th>MySQL 5.7.26</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">session A</td>
+<td style="text-align:center">session B</td>
+<td>session A</td>
+<td>session B</td>
+</tr>
+<tr>
+<td style="text-align:center">begin;insert into t values (3, &lsquo;A&rsquo;);ERROR 1062 (23000): Duplicate entry &lsquo;A&rsquo; for key &lsquo;name&rsquo;</td>
+<td style="text-align:center"></td>
+<td>begin;insert into t values (3, &lsquo;A&rsquo;);ERROR 1062 (23000): Duplicate entry &lsquo;A&rsquo; for key &lsquo;name&rsquo;</td>
+<td></td>
+</tr>
+<tr>
+<td style="text-align:center"></td>
+<td style="text-align:center">insert into t values (3, &lsquo;Z&rsquo;);ok</td>
+<td></td>
+<td>insert into t values (3, &lsquo;Z&rsquo;);waiting&hellip;</td>
+</tr>
+<tr>
+<td style="text-align:center">insert into A values (3, &lsquo;A&rsquo;);ERROR 1062 (23000): Duplicate entry &lsquo;3&rsquo; for key &lsquo;PRIMARY&rsquo;</td>
+<td style="text-align:center"></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>从上面可以看出，在Repeatable Read隔离级别下，MySQL 5.7.19上当session A的insert into A values (3, &lsquo;A&rsquo;)违反唯一性约束（记录1已经有name = &lsquo;A‘）回滚后，session B仍然可以插入记录，这显然违反了S2PL，破坏了正确性。</p>
+<blockquote class="book-hint info">
+  <p>5.7.19有两个问题：</p>
+<ol>
+<li>
+<p>破坏了可串行性（无法保证2PL：两阶段封锁协议）</p>
+<p>可串行性：并发事务的的调度等价于一个串行调度，即session A和session B的执行可以任意顺序，而语义一致。而session A的两次同样的insert语句显然不满足可串行性。</p>
+</li>
+<li>
+<p>破坏了可恢复性</p>
+<p>可恢复性表明的是提交阶段事务间互相影响的属性，即已经提交的事务没有读过被中止的事务写的数据。，或者说，保证的是多个事务并发调度后期的提交顺序对数据的一致性没有影响。</p>
+<p>2PL保证了可串行性，但是不满足可恢复性，即不能避免级联回滚，更不满足严格性（有冲突动作的并发事务中，先发生写操作的事务提交或中止的操作优先于其他事务）。</p>
+<p>session B插入成功会造成级联删除的问题，即插入后如果session B先提交，而session A随后需要rollback，session A就需要级联删除session B已经提交的相关数据。</p>
+<p>S2PL（严格两阶段封锁协议）要求持有的排他锁必须在事务提交后才能释放，从而避免了级联删除。</p>
+<p>SS2PL要求事务提交之前不得释放任何锁。</p>
+</li>
+</ol>
+
+</blockquote>
+
+<p>而MySQL 5.7.26下session B的insert语句出现锁等待，这样做合理吗？</p>
+<p>我们来看当session A insert时发生的事情：</p>
+<ol>
+<li>在主键所在的聚簇索引树上插入行记录(3, &lsquo;A&rsquo;)，并加&lt;PK=3, X-REC&gt; implicit lock</li>
+<li>在唯一二级索引树（name）上插入行记录(&lsquo;A&rsquo;, 3)时，发现违反唯一性约束，需要回滚</li>
+<li>对已经在第1步写入的行记录(3, &lsquo;A&rsquo;)进行undo操作，并将implicit lock转换为explicit lock，因为3是最后一条用户记录，所以需要把之前第1步在行记录3上加的锁信息迁移到supremum伪记录上，即&lt;supremum, X-ORDINARY&gt;</li>
+</ol>
+<p>session B执行insert时，为了保证避免出现幻读，需要查看待插入点的下一条记录上是否持有锁，这时supremum上session A已经在(2, +oo)持有X锁，因此等待，符合预期。</p>
+<p>锁的信息如下：</p>
+<pre><code>mysql&gt; select * from information_schema.INNODB_TRX;
++--------+-----------+---------------------+-----------------------+---------------------+------------+---------------------+---------------------------------------------+---------------------+-------------------+-------------------+------------------+-----------------------+-----------------+-------------------+-------------------------+---------------------+-------------------+------------------------+----------------------------+---------------------------+---------------------------+------------------+----------------------------+
+| trx_id | trx_state | trx_started         | trx_requested_lock_id | trx_wait_started    | trx_weight | trx_mysql_thread_id | trx_query                                   | trx_operation_state | trx_tables_in_use | trx_tables_locked | trx_lock_structs | trx_lock_memory_bytes | trx_rows_locked | trx_rows_modified | trx_concurrency_tickets | trx_isolation_level | trx_unique_checks | trx_foreign_key_checks | trx_last_foreign_key_error | trx_adaptive_hash_latched | trx_adaptive_hash_timeout | trx_is_read_only | trx_autocommit_non_locking |
++--------+-----------+---------------------+-----------------------+---------------------+------------+---------------------+---------------------------------------------+---------------------+-------------------+-------------------+------------------+-----------------------+-----------------+-------------------+-------------------------+---------------------+-------------------+------------------------+----------------------------+---------------------------+---------------------------+------------------+----------------------------+
+| 4005   | LOCK WAIT | 2021-03-29 09:57:19 | 4005:31:3:1           | 2021-03-29 09:57:19 |          2 |                 119 | insert into t values (3, 'Z')               | inserting           |                 1 |                 1 |                2 |                  1136 |               1 |                 0 |                       0 | REPEATABLE READ     |                 1 |                      1 | NULL                       |                         0 |                         0 |                0 |                          0 |
+| 4004   | RUNNING   | 2021-03-29 09:56:41 | NULL                  | NULL                |          4 |                 118 | select * from information_schema.INNODB_TRX | NULL                |                 0 |                 1 |                4 |                  1136 |               2 |                 0 |                       0 | REPEATABLE READ     |                 1 |                      1 | NULL                       |                         0 |                         0 |                0 |                          0 |
++--------+-----------+---------------------+-----------------------+---------------------+------------+---------------------+---------------------------------------------+---------------------+-------------------+-------------------+------------------+-----------------------+-----------------+-------------------+-------------------------+---------------------+-------------------+------------------------+----------------------------+---------------------------+---------------------------+------------------+----------------------------+
+2 rows in set (0.00 sec)
+ 
+mysql&gt; select * from information_schema.INNODB_LOCKS;
++-------------+-------------+-----------+-----------+------------+------------+------------+-----------+----------+------------------------+
+| lock_id     | lock_trx_id | lock_mode | lock_type | lock_table | lock_index | lock_space | lock_page | lock_rec | lock_data              |
++-------------+-------------+-----------+-----------+------------+------------+------------+-----------+----------+------------------------+
+| 4005:31:3:1 | 4005        | X         | RECORD    | `tjw`.`t`  | PRIMARY    |         31 |         3 |        1 | supremum pseudo-record |
+| 4004:31:3:1 | 4004        | X         | RECORD    | `tjw`.`t`  | PRIMARY    |         31 |         3 |        1 | supremum pseudo-record |
++-------------+-------------+-----------+-----------+------------+------------+------------+-----------+----------+------------------------+
+2 rows in set, 1 warning (0.00 sec)
+ 
+mysql&gt; select * from information_schema.INNODB_LOCK_WAITS;
++-------------------+-------------------+-----------------+------------------+
+| requesting_trx_id | requested_lock_id | blocking_trx_id | blocking_lock_id |
++-------------------+-------------------+-----------------+------------------+
+| 4005              | 4005:31:3:1       | 4004            | 4004:31:3:1      |
++-------------------+-------------------+-----------------+------------------+
+1 row in set, 1 warning (0.00 sec)
+</code></pre><p>综上所述，MySQL 5.7.26中的锁机制是正确且合理的。因此，我们的解决方案是：</p>
+<ol>
+<li>尽量避免大事务，长事务，复杂事务，这会导致事务在数据库中的运行时间加长</li>
+<li>在出现上述事务场景时，配置合理的锁等待时间（lock_wait_timeout），并增加一个新的配置参数（kill_idle_transaction）用于主动kill idle时长超过一定时间的事务。</li>
+</ol>
+<p>更改后效果：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">lock_wait_timeout</th>
+<th style="text-align:center"></th>
+<th>kill_idle_transaction</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">session A</td>
+<td style="text-align:center">session B</td>
+<td>session A</td>
+<td>session B</td>
+</tr>
+<tr>
+<td style="text-align:center">begin;insert into t values (3, &lsquo;A&rsquo;);ERROR 1062 (23000): Duplicate entry &lsquo;A&rsquo; for key &lsquo;name&rsquo;</td>
+<td style="text-align:center"></td>
+<td>begin;insert into t values (3, &lsquo;A&rsquo;);ERROR 1062 (23000): Duplicate entry &lsquo;A&rsquo; for key &lsquo;name&rsquo;</td>
+<td></td>
+</tr>
+<tr>
+<td style="text-align:center"></td>
+<td style="text-align:center">insert into t values (3, &lsquo;Z&rsquo;);waiting&hellip;util lock_wait_timeoutERROR 1205 (HY000): Lock wait timeout exceeded; try restarting transaction默认配置innodb_rollback_on_timeout=OFF 即InnoDB自动回滚该锁超时语句，但整个事务的提交和回滚需要用户需要显式决定</td>
+<td></td>
+<td>insert into t values (3, &lsquo;Z&rsquo;);waiting&hellip;</td>
+</tr>
+<tr>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+<td>util kill_idle_transactiontransaction is killed by MySQL事务自动中止ERROR 2006 (HY000): MySQL server has gone away No connection. Trying to reconnect&hellip; Connection id: 16 Current database: tjwERROR 1062 (23000): Duplicate entry &lsquo;3&rsquo; for key &lsquo;PRIMARY&rsquo;</td>
+<td></td>
+</tr>
+<tr>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+<td></td>
+<td>Query OK, 1 row affected (5.44 sec)</td>
+</tr>
+</tbody>
+</table>
+<p>附，官方在MySQL 5.7.26上的commit log：</p>
+<pre><code>commit 066b6fdd433aa6673622341f1a2f0a3a20018043
+Author: Aditya A &lt;aditya.a@oracle.com&gt;
+Date:   Thu Nov 29 17:49:04 2018 +0530
+ 
+    Bug #25966845 INSERT ON DUPLICATE KEY GENERATE A DEADLOCK
+ 
+    PROBLEM
+    -------
+ 
+    When we do a partial rollback of the tuple due to &quot;on duplicate
+    key update&quot; clause we were not maintaining serilizability,
+    so another connection waiting on the row could update it and
+    cause wrong results.
+ 
+    FIX
+    ---
+ 
+    1) During partial rollback ,while deleting the tuple convert implicit
+       lock on the tuple to explicit lock ,so that no connection can
+       get hold of the tuple during delete. This lock is later inherited
+       by the next record.
+ 
+    2) Reverted fix for
+ 
+       Bug 11758237 INSERT ON DUPLICATE KEY UPDATE SOMETIMES WRITES BINLOG POSITION INCORRECT
+            This bug fix was just extending the gap locks for duplicates as a
+            solution to this problem ,which was not a foolproof solution. Therfore we
+            reverted this fix
+ 
+       Bug 17604730 ASSERTION: *CURSOR-&gt;INDEX-&gt;NAME == TEMP_INDEX_PREFIX
+           Dependent on 11758237
+ 
+       Bug 20040791 - ASSERT THR_GET_TRX ERROR_STATE DB_SUCCESS ROW_INS_SEC_INDEX_ENTRY_LOW
+            Dependent on 11758237
+ 
+    3) Renamed trx-&gt;error_info to trx-&gt;error_index
+ 
+ 
+        [#rb 20418 Reviewed by Deb and Kuba]
+</code></pre></article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#线上问题">线上问题</a></li>
+    <li><a href="#线下模拟">线下模拟</a></li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

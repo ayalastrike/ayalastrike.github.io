@@ -23,7 +23,7 @@
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.6a5a4d6fe24736cfc4f5220ebc4fae083b5763c0f43225964d1f9e2a60535079.js" integrity="sha256-alpNb&#43;JHNs/E9SIOvE&#43;uCDtXY8D0MiWWTR&#43;eKmBTUHk=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.5145e623761d7b8f5c9bce92d26a14a67e94c255e1e94ee68d160fbf51f8067c.js" integrity="sha256-UUXmI3Yde49cm86S0moUpn6UwlXh6U7mjRYPv1H4Bnw=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -83,7 +83,11 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/Server/user_connection_handler/">用户建链（转）</a></li>
 </ul>
 </li>
-<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a>
+<ul>
+<li><a href="/docs/MySQL/Server/kill_idle_transaction/">kill_idle_transaction</a></li>
+</ul>
+</li>
 <li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
 <li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
 <li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
@@ -106,7 +110,11 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/InnoDB/7_latch/">latch</a></li>
 <li><a href="/docs/MySQL/InnoDB/8_b+_tree/">B+ tree</a></li>
 <li><a href="/docs/MySQL/InnoDB/9_change_buffer/">change buffer</a></li>
-<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a></li>
+<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/10.1_mysql5.7.26_lock_issue/">MySQL 5.7.26锁问题</a></li>
+</ul>
+</li>
 <li><a href="/docs/MySQL/InnoDB/11_redo_log/">redo log</a></li>
 <li><a href="/docs/MySQL/InnoDB/12_transaction/">transaction</a></li>
 </ul>
@@ -331,7 +339,7 @@ static MYSQL_SYSVAR_ULONG(page_size, srv_page_size,
 <tr>
 <td style="text-align:left">PAGE_LEVEL</td>
 <td style="text-align:left">2</td>
-<td style="text-align:left">当前页在索引树中的位置，0x00代表叶子节点，即叶子节点总是在第0层（不变性），page_is_leaf</td>
+<td style="text-align:left">当前页在B+ tree中的层，0x00代表叶子节点，即叶子节点总是在第0层（不变性），page_is_leaf</td>
 </tr>
 <tr>
 <td style="text-align:left">PAGE_INDEX_ID</td>
@@ -341,12 +349,12 @@ static MYSQL_SYSVAR_ULONG(page_size, srv_page_size,
 <tr>
 <td style="text-align:left">PAGE_BTR_SEG_LEAF</td>
 <td style="text-align:left">10</td>
-<td style="text-align:left">B+树叶子节点所在段的segment header，仅在B+树的root页中定义</td>
+<td style="text-align:left">B+ tree叶子节点所在段的segment header，仅在B+ tree的root页中定义</td>
 </tr>
 <tr>
 <td style="text-align:left">PAGE_BTR_SEG_TOP</td>
 <td style="text-align:left">10</td>
-<td style="text-align:left">B+树非叶子节点所在段的segment header，仅在B+树的root页中定义</td>
+<td style="text-align:left">B+ tree非叶子节点所在段的segment header，仅在B+ tree的root页中定义</td>
 </tr>
 </tbody>
 </table>
@@ -384,7 +392,7 @@ time (3 ms) is 20 % of the disk random access time (15 ms).
   <a class="anchor" href="#record-organization">#</a>
 </h2>
 <p>在record中讲过，每个页都有2个伪记录，如图所示。在infimum记录和supremum记录之间的被称为用户记录（page_rec_is_user_rec_low）。因此在page header中用PAGE_N_HEAP和PAGE_N_RECS标识堆和页中的记录数量，PAGE_N_RECS表示一页上真实的记录数，PAGE_N_HEAP表示从HEAP上分配出去的记录数。</p>
-<p><img src="/InnoDB_page-infimum_supremum_record-2683587.png" alt="InnoDB_page-infimum_supremum_record" /></p>
+<p><img src="/InnoDB_page-infimum_supremum_record.png" alt="InnoDB_page-infimum_supremum_record" /></p>
 <p>在old-style和new-style行格式下，infimum和supremum记录稍有区别，如下图所示：</p>
 <p><img src="/InnoDB_page_view_with_row_format_layout.png" alt="InnoDB_page_view_with_row_format_layout" /></p>
 <p>在PAGE_HEADER中：</p>

@@ -43,7 +43,7 @@
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.6a5a4d6fe24736cfc4f5220ebc4fae083b5763c0f43225964d1f9e2a60535079.js" integrity="sha256-alpNb&#43;JHNs/E9SIOvE&#43;uCDtXY8D0MiWWTR&#43;eKmBTUHk=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.5145e623761d7b8f5c9bce92d26a14a67e94c255e1e94ee68d160fbf51f8067c.js" integrity="sha256-UUXmI3Yde49cm86S0moUpn6UwlXh6U7mjRYPv1H4Bnw=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -103,7 +103,11 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/Server/user_connection_handler/">用户建链（转）</a></li>
 </ul>
 </li>
-<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a>
+<ul>
+<li><a href="/docs/MySQL/Server/kill_idle_transaction/">kill_idle_transaction</a></li>
+</ul>
+</li>
 <li><a href="/docs/MySQL/Server/ThreadPool/"class=active>Thread Pool</a></li>
 <li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
 <li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
@@ -126,7 +130,11 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/InnoDB/7_latch/">latch</a></li>
 <li><a href="/docs/MySQL/InnoDB/8_b+_tree/">B+ tree</a></li>
 <li><a href="/docs/MySQL/InnoDB/9_change_buffer/">change buffer</a></li>
-<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a></li>
+<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/10.1_mysql5.7.26_lock_issue/">MySQL 5.7.26锁问题</a></li>
+</ul>
+</li>
 <li><a href="/docs/MySQL/InnoDB/11_redo_log/">redo log</a></li>
 <li><a href="/docs/MySQL/InnoDB/12_transaction/">transaction</a></li>
 </ul>
@@ -219,6 +227,92 @@ https://github.com/alex-shpak/hugo-book
       </ul>
     </li>
     <li><a href="#high-level-design">High Level Design</a></li>
+    <li><a href="#low-level-design">Low Level Design</a>
+      <ul>
+        <li><a href="#模块分类">模块分类</a></li>
+        <li><a href="#线程池初始化和销毁">线程池初始化和销毁</a>
+          <ul>
+            <li><a href="#tp_conn_handler">tp_conn_handler</a></li>
+            <li><a href="#初始化线程池">初始化线程池</a></li>
+            <li><a href="#关闭线程池">关闭线程池</a></li>
+          </ul>
+        </li>
+        <li><a href="#连接处理">连接处理</a>
+          <ul>
+            <li><a href="#tcp建链连接处理">TCP建链&amp;连接处理</a></li>
+          </ul>
+        </li>
+        <li><a href="#thread和thd对接">thread和THD对接</a>
+          <ul>
+            <li><a href="#pthread的初始化">pthread的初始化</a></li>
+            <li><a href="#thd的创建和初始化">thd的创建和初始化</a></li>
+            <li><a href="#thd-attach">thd attach</a></li>
+            <li><a href="#处理请求">处理请求</a></li>
+            <li><a href="#销毁thd">销毁thd</a></li>
+            <li><a href="#销毁pthread">销毁pthread</a></li>
+          </ul>
+        </li>
+        <li><a href="#io-multiplexing">IO multiplexing</a></li>
+        <li><a href="#pthread调度">pthread调度</a>
+          <ul>
+            <li><a href="#pthread状态">pthread状态</a></li>
+            <li><a href="#处理epoll-events">处理epoll events</a></li>
+            <li><a href="#pthread-allocation-throttle">pthread allocation throttle</a></li>
+          </ul>
+        </li>
+        <li><a href="#请求调度">请求调度</a>
+          <ul>
+            <li><a href="#过载-overload">过载 overload</a></li>
+            <li><a href="#高优先级调度">高优先级调度</a></li>
+          </ul>
+        </li>
+        <li><a href="#idle超时处理">idle超时处理</a>
+          <ul>
+            <li><a href="#vio-implemenation">VIO implemenation</a></li>
+          </ul>
+        </li>
+        <li><a href="#stall感知">stall感知</a>
+          <ul>
+            <li><a href="#相关知识">相关知识</a>
+              <ul>
+                <li><a href="#thd">THD</a></li>
+                <li><a href="#thr_lock">thr_lock</a></li>
+              </ul>
+            </li>
+            <li><a href="#现有的等待回调设计">现有的等待回调设计</a>
+              <ul>
+                <li><a href="#等待">等待</a></li>
+                <li><a href="#等待开始和结束的接口">等待开始和结束的接口</a></li>
+                <li><a href="#接口实现">接口实现</a></li>
+              </ul>
+            </li>
+            <li><a href="#线程池回调对接和实现">线程池回调对接和实现</a>
+              <ul>
+                <li><a href="#定义上钩实现">定义上钩实现</a></li>
+                <li><a href="#thd适配">THD适配</a></li>
+                <li><a href="#挂钩">挂钩</a></li>
+                <li><a href="#threadpool-callback-implementations">ThreadPool callback implementations</a></li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+        <li><a href="#定时器">定时器</a>
+          <ul>
+            <li><a href="#stall检测">stall检测</a></li>
+            <li><a href="#timeout检测">timeout检测</a></li>
+          </ul>
+        </li>
+        <li><a href="#统计信息">统计信息</a></li>
+        <li><a href="#observability">Observability</a></li>
+        <li><a href="#内部数据结构">内部数据结构</a>
+          <ul>
+            <li><a href="#对象">对象</a></li>
+            <li><a href="#生命周期">生命周期</a></li>
+            <li><a href="#对象数据结构详解">对象数据结构详解</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
   </ul>
 </nav>
 
@@ -651,7 +745,1175 @@ https://github.com/alex-shpak/hugo-book
   以下如果没有特别指出，则队列指的是普通队列（thread_group_t.queue），高优先级队列会指明为高优先级队列（thread_group_t.high_prio_queue）。
 </blockquote>
 
-</article>
+<h1 id="low-level-design">
+  Low Level Design
+  <a class="anchor" href="#low-level-design">#</a>
+</h1>
+<p>根据high level deisgn，详细拆解各个模块。</p>
+<h2 id="模块分类">
+  模块分类
+  <a class="anchor" href="#%e6%a8%a1%e5%9d%97%e5%88%86%e7%b1%bb">#</a>
+</h2>
+<p>根据High Level Design，我们将线程池实现分为以下5个模块：</p>
+<ul>
+<li>线程池资源的创建和销毁：负责线程池的初始化和销毁</li>
+<li>连接处理：负责TCP建链后的请求分发，由原来的新起一个线程来1:1对应connection变为分发给线程池内的某个group，由group内的某个pthread处理。</li>
+<li>THD和pthread对接</li>
+<li>IO multiplexing</li>
+<li>pthread调度</li>
+<li>wait感知和处理，并增加对socket I/O wait的感知</li>
+<li>定时器：对stall的THD进行处理。</li>
+</ul>
+<p>线程池模块的文件层次设计如下：</p>
+<p><img src="/MySQL_ThreadPool_file_layout.png" alt="MySQL_ThreadPool_file_layout" /></p>
+<h2 id="线程池初始化和销毁">
+  线程池初始化和销毁
+  <a class="anchor" href="#%e7%ba%bf%e7%a8%8b%e6%b1%a0%e5%88%9d%e5%a7%8b%e5%8c%96%e5%92%8c%e9%94%80%e6%af%81">#</a>
+</h2>
+<p>在我们讨论线程池初始化和销毁之前，先通过下面这张图总览一下MySQL的连接处理框架：</p>
+<p><img src="/MySQL_ThreadPool_connection_process.png" alt="MySQL_ThreadPool_connection_process" /></p>
+<h3 id="tp_conn_handler">
+  tp_conn_handler
+  <a class="anchor" href="#tp_conn_handler">#</a>
+</h3>
+<p>在MySQL启动过程中，首先需要创建并初始化Connection_handler_manager，并通过thread_handling初始化具体的connection_handler。然后通过Connection_acceptor创建Mysqld_socket_listener，监听socket并负责建链。</p>
+<p>因此，这里引入tp_conn_handler负责处理连接到连接队列的转换，以及初始化（tp_init）、销毁（tp_end）线程池。</p>
+<p>tp_conn_handler的工作包括：</p>
+<ol>
+<li>增加conn_handler：Thread_pool_connection_handler，以下简称tp_conn_handler</li>
+<li>在配置handler=SCHEDULER_THREAD_POOL时，new tp_conn_handler，初始化线程池</li>
+<li>在mysqld关闭（conn_mgr销毁时），销毁线程池</li>
+<li>tp_conn_handler进行具体的连接处理（Thread_pool_connection_handler::add_connection）</li>
+</ol>
+<p>Thread_pool_connection_handler</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">函数</th>
+<th style="text-align:left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">ctor/dtor</td>
+<td style="text-align:left">线程池初始化/关闭，启动/停止定时器（pool_timer）</td>
+</tr>
+<tr>
+<td style="text-align:left">add_connection</td>
+<td style="text-align:left">处理连接（后详述）</td>
+</tr>
+<tr>
+<td style="text-align:left">get_max_threads</td>
+<td style="text-align:left">返回线程池可以创建的最大线程数（threadpool_max_threads）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="初始化线程池">
+  初始化线程池
+  <a class="anchor" href="#%e5%88%9d%e5%a7%8b%e5%8c%96%e7%ba%bf%e7%a8%8b%e6%b1%a0">#</a>
+</h3>
+<p>初始化线程池（tp_init）：</p>
+<ol>
+<li>初始化thread_group数组（all_groups：128），thread_group组数组在整个线程池生命周期内不再变化</li>
+<li>根据pool_size设置线程池，初始化线程组，并创建每个组的epoll_fd</li>
+<li>启动定时器</li>
+</ol>
+<blockquote class="book-hint info">
+  此时并没有创建工作线程（worker pthread，细分为listener &amp; worker），只是完成资源的初始化，工作线程是随着连接的到来逐步创建的。
+</blockquote>
+
+<h3 id="关闭线程池">
+  关闭线程池
+  <a class="anchor" href="#%e5%85%b3%e9%97%ad%e7%ba%bf%e7%a8%8b%e6%b1%a0">#</a>
+</h3>
+<p>关闭线程（tp_end，与tp_init逆序）：</p>
+<ul>
+<li>停止定时器</li>
+<li>依次关闭线程组</li>
+</ul>
+<p>在关闭线程组时：</p>
+<ol>
+<li>如果当前活跃线程组个数为0，直接close(fd)</li>
+<li>通知listener和所有的工作线程
+创建关闭管道（shutdown_pipe），并加入epoll，然后通过管道通知listener
+通过信号通知工作线程</li>
+</ol>
+<p><strong>pseudo code</strong></p>
+<pre><code>PSI
+mutex:
+    thread_group_mutex
+    timer_mutex
+cond:
+    worker_thread_cond
+    timer_cond
+thread:
+    worker_thread
+    timer_thread
+ 
+tp_init
+    threadpool_started = true
+    for loop 0..MAX
+        thread_group_init(i)
+    set_tp_group_size
+    timer start // TODO
+    PSI reg
+ 
+set_tp_group_size
+    for 0 ... size
+        epoll_create
+ 
+tp_end
+    timer stop  // TODO
+    for loop MAX
+        thread_group_close(i)
+    threadpool_started = false
+ 
+thread_group_init
+    mutex init
+    pthread_attr set
+    pollfd = -1
+    shutdown_pipe[0][1] = -1
+ 
+thread_group_close
+    lock
+    thread_group-&gt;shtudown = true
+    // listener = NULL              // TODO
+    open shutdown_pipe and associate with epollfd
+    write(shutdown_pipe, 1)
+    wake all thread，由pthread自己处理关闭（最后一个destory thread_group）
+    unlock
+ 
+thread_group_destroy（由group内最后一个pthread调用）
+    mutex dtor
+    pollfd close
+    shutdown_pipe[0][1] close
+</code></pre><h2 id="连接处理">
+  连接处理
+  <a class="anchor" href="#%e8%bf%9e%e6%8e%a5%e5%a4%84%e7%90%86">#</a>
+</h2>
+<h3 id="tcp建链连接处理">
+  TCP建链&amp;连接处理
+  <a class="anchor" href="#tcp%e5%bb%ba%e9%93%be%e8%bf%9e%e6%8e%a5%e5%a4%84%e7%90%86">#</a>
+</h3>
+<p>在客户端连接到达时，Mysqld_socket_listener::listen_for_connection_event负责TCP建链，并在建链成功后创建Channel_Info，交给Connection_handler_manager负责整体的连接控制，然后由connection_handler处理连接，此时交由tp_conn_handler处理。</p>
+<p>tp_conn_handler的连接处理：</p>
+<ol>
+<li>根据channel_info创建THD（channel_info-&gt;create_thd()）</li>
+<li>创建连接对象（connection_t），并关联THD</li>
+<li>set THD.thread_id &amp; create time</li>
+<li>将THD分配给某个线程组</li>
+<li>压入线程组普通队列</li>
+</ol>
+<p>THD分配线程组的策略是取模（thd.thread_id % group_size），因为THD的thread_id是单调递增的，所以可以做到线程组间连接的均匀分配。</p>
+<blockquote class="book-hint info">
+  从资源的角度考虑，在途事务会持有（锁）资源，所以需要优先将进行中的事务尽快处理完。因此，新建的连接会被放入普通队列，连接的后续请求可以进入高优队列。
+</blockquote>
+
+<p><strong>pseudo code</strong></p>
+<pre><code>连接队列    LILO（考虑公平性）
+typedef I_P_List&lt;connection_t,
+                 I_P_List_adapter&lt;connection_t,
+                                  &amp;connection_t::next_in_queue,
+                                  &amp;connection_t::prev_in_queue&gt;,
+                 I_P_List_null_counter,
+                 I_P_List_fast_push_back&lt;connection_t&gt; &gt;
+connection_queue_t;
+ 
+tp_conn_handler::add_connection
+    create thd
+    alloc connection
+    delete channel_info
+    set thd.thread_id &amp; create_time
+    thd_mgr-&gt;add_thd
+    分组（mod）
+    group-&gt;connection_count++
+    enqueue(group, connection)
+ 
+alloc_connection
+    malloc connection_t
+    set default value
+ 
+enqueue(group, connection)
+    lock
+        push_back(group-&gt;queue)
+        if all sleep(active == 0), wake_or_create_thread
+    unlock
+ 
+change group
+    group-&gt;connection_count ++--
+</code></pre><h2 id="thread和thd对接">
+  thread和THD对接
+  <a class="anchor" href="#thread%e5%92%8cthd%e5%af%b9%e6%8e%a5">#</a>
+</h2>
+<p>在线程池方案中，因为对THD和pthread做了解绑，即当事件发生时，再将THD attach到pthread上。</p>
+<p>所以需要做以下几类事情：</p>
+<ul>
+<li>pthread的初始化</li>
+<li>thd的创建和初始化</li>
+<li>thd attach</li>
+<li>处理请求</li>
+<li>销毁thd</li>
+<li>销毁pthred</li>
+</ul>
+<h3 id="pthread的初始化">
+  pthread的初始化
+  <a class="anchor" href="#pthread%e7%9a%84%e5%88%9d%e5%a7%8b%e5%8c%96">#</a>
+</h3>
+<p>在线程池中，pthread按照按需的方式进行创建。在创建pthread（create_thread）后立即进行初始化（my_thread_init）</p>
+<h3 id="thd的创建和初始化">
+  thd的创建和初始化
+  <a class="anchor" href="#thd%e7%9a%84%e5%88%9b%e5%bb%ba%e5%92%8c%e5%88%9d%e5%a7%8b%e5%8c%96">#</a>
+</h3>
+<p>thd的创建在tp_conn_handler::add_connection时进行（create_thd）</p>
+<p>thd的初始化也在add_connection时进行：</p>
+<ul>
+<li>thd→set_new_id</li>
+<li>thd→set_start_time &amp; thd→set_create_time</li>
+<li>thd_mgr-&gt;add_thd</li>
+</ul>
+<h3 id="thd-attach">
+  thd attach
+  <a class="anchor" href="#thd-attach">#</a>
+</h3>
+<p>thd attach到pthread上在epoll event发生时（listen/wake），在处理connection phase/command phase时进行attach。</p>
+<p>attach时：</p>
+<ul>
+<li>set_stack(&amp;thd)</li>
+<li>thd→store_globals()</li>
+<li>my_thread_set_id()</li>
+<li>my_socket_set_thread_owner()</li>
+</ul>
+<h3 id="处理请求">
+  处理请求
+  <a class="anchor" href="#%e5%a4%84%e7%90%86%e8%af%b7%e6%b1%82">#</a>
+</h3>
+<p>MySQL中按照协议，请求的处理分为两个阶段：</p>
+<ul>
+<li>connection phase：进行handshake</li>
+<li>command phase：处理客户端命令</li>
+</ul>
+<p>所以这里需要进行THD到pthread的切换：</p>
+<ol>
+<li>connection phase
+thd attach
+login</li>
+<li>command phase
+thd attach
+do_command</li>
+</ol>
+<h3 id="销毁thd">
+  销毁thd
+  <a class="anchor" href="#%e9%94%80%e6%af%81thd">#</a>
+</h3>
+<p>提供一个wrapper将thd和connection的相关资源销毁包在一起：</p>
+<ul>
+<li>end_connection</li>
+<li>close_connection</li>
+<li>thd→release_resources()</li>
+<li>thd_mgr→remove_thd()</li>
+<li>conn&ndash;</li>
+<li>delete thd</li>
+</ul>
+<h3 id="销毁pthread">
+  销毁pthread
+  <a class="anchor" href="#%e9%94%80%e6%af%81pthread">#</a>
+</h3>
+<p>销毁pthread比较简单：</p>
+<ul>
+<li>my_thread_end()</li>
+</ul>
+<p><strong>pseudo code</strong></p>
+<pre><code>工作队列    LIFO（考虑cache亲和性）
+typedef I_P_List&lt;worker_thread_t,
+                 I_P_List_adapter&lt;worker_thread_t,
+                                  &amp;worker_thread_t::next_in_list,
+                                  &amp;worker_thread_t::prev_in_list&gt; &gt;
+worker_list_t;
+ 
+wake_or_create_thread
+    wake_thread
+    create_thread
+ 
+wake_thread
+    pop front from waiting_list（FILO）
+    thread-&gt;woken = true
+    notify
+ 
+create_thread
+    MAX limit
+        return
+    pthread_create(worker_main)
+ 
+worker_main
+    worker_thread_t this_thread
+    set this_thread-&gt;group
+    init cond
+    wakeup = false
+    for(;;)
+        connection_t *conn
+        conn = get_event(&amp;this_thread, group)
+        if (!conn)
+            exit
+        handle_event(conn)
+    last thread in group, destroy group // 由线程组的最后一个线程负责销毁线程组资源，因为需要thread_group-&gt;shutdown_pipe通知listener
+    my_thread_end
+ 
+handle_event(conn)
+    handle_connection_phase
+    handle_command_phase
+    io_handle
+end:
+    connection_abort
+ 
+handle_connection_phase
+    thread_attach
+    thd_prepare_connection
+ 
+handle_command_phase
+    thread_attach
+    for(;;)
+        do_command
+ 
+thread_attach
+    set_stack
+    thd-&gt;store_globals
+    my_thread_set_id
+    my_socket_set_thread_owner
+ 
+io_handle
+    if !connection-&gt;not_bound_to_epollfd
+        io_poll_associate_fd()
+    io_poll_read
+ 
+connection_abort
+    tp_remove_connection
+    group-&gt;connection_count--
+    free connection
+ 
+tp_remove_connection
+    thread_attach
+    end_connection
+    close_connection
+    thd-&gt;release_resources
+    remove_thd
+    conn--
+    delete thd
+</code></pre><p>草图如下：</p>
+<p><img src="/MySQL_ThreadPool_thd-pthread.jpeg" alt="MySQL_ThreadPool_thd-pthread" /></p>
+<h2 id="io-multiplexing">
+  IO multiplexing
+  <a class="anchor" href="#io-multiplexing">#</a>
+</h2>
+<p>在原来的conn_handler中，每个pthread都会通过select等待各自的connection发送网络请求。</p>
+<p>在线程池中，每个组有一个epoll fd，在add_connection时，对connection进行group的分配，并将socket fd关联到epoll fd上。然后在epoll_wait发生事件后，再通过vio→read的方式读取请求。这样，综合采用了epoll+select。</p>
+<p>IO multiplexing提供如下方法（支持多平台）：</p>
+<pre><code>                                            implementation
+创建poll io fd    io_poll_create             epoll/kqueue/Solaris
+绑定epoll fd      io_poll_associate_fd       epoll_ctl(pollfd, EPOLL_CTL_ADD)
+解绑epoll fd      io_poll_disassociate_fd    epoll_ctl(pollfd, EPOLL_CTL_DEL)
+设置读状态         io_poll_read               epoll_ctl(pollfd, EPOLL_CTL_MOD, fd, EPOLLIN)
+等待事件           io_poll_wait               epoll_wait
+</code></pre><h2 id="pthread调度">
+  pthread调度
+  <a class="anchor" href="#pthread%e8%b0%83%e5%ba%a6">#</a>
+</h2>
+<p>在pthread的调度上，总体原则如下：</p>
+<ul>
+<li>尽量保证每个CPU core上只有一个pthread运行，减少线程上下文切换的开销</li>
+<li>pthread可以动态的根据workload弹性扩缩容</li>
+<li>pthread等待队列采用FILO，增加CPU的亲和性</li>
+</ul>
+<h3 id="pthread状态">
+  pthread状态
+  <a class="anchor" href="#pthread%e7%8a%b6%e6%80%81">#</a>
+</h3>
+<p>pthread的状态机设计如下：</p>
+<p><img src="/MySQL_ThreadPool_Thread_State_Machine.png" alt="MySQL_ThreadPool_Thread_State_Machine" /></p>
+<p><strong>pseudo code</strong></p>
+<pre><code>add_connection
+    enqueue
+ 
+enqueue
+    push_back(group-&gt;queue)
+    if all sleep(active == 0), create_or_create_thread
+ 
+get_event   // 处理请求
+    lock
+    for(;;)
+        if (thread_group-&gt;shutdown) break;                  // 关闭退出
+        pop(group-&gt;queue) break;                            // connection拿完就走
+        if !listener, listen()                              // 没人监听，坐在收发室
+        thread-&gt;woken = false, enqueue(group-&gt;waiting_list) // idle，休眠
+        cond wait ... until notify/timeout
+    unlock
+ 
+pthread notify（wake_thread）
+    enqueue, if all sleep, notify
+    listener收到消息，处理不过来，notify
+    关闭线程池，notify all
+pthread timeout
+    tp_idle_timeout, pthread exit
+    tp_stall_timeout, kill THD
+ 
+listen    // 监听
+    for(;;)
+        cnt = epoll_wait(-1)
+        lock
+        cnt &lt; 0 break;
+        if (thread_group-&gt;shutdown) break;  // 关闭退出
+        group-&gt;io_event_count += cnt
+        // do it myself or others
+        others: enqueue(connection)
+        do it myself, then get connection and leave, handle_event()
+        unlock
+</code></pre><p>从上面可以看到，同一个group中listener的event dispatch和get_event是互斥的，即同一时刻要么在派发事件，要么在获取事件。</p>
+<p>同一组内的线程在同一时刻可能处于以下几种状态：</p>
+<ul>
+<li>listen</li>
+<li>idle</li>
+<li>killed</li>
+<li>active</li>
+<li>stall</li>
+</ul>
+<p>状态细节</p>
+<pre><code>listen
+    thread_group-&gt;listener
+ 
+idle
+    worker_thread-&gt;woken
+ 
+killed
+    thd-&gt;killed = THD::KILL_CONNECTION
+ 
+active
+    pthread create      +1
+    pthread exit        -1
+    listen              --
+    listener get event  ++
+    sleep               --
+    wake                ++
+    thd wait begin      --
+    thd wait end        ++
+ 
+waiting
+    thd wait begin      ++
+    thd wait end        --
+ 
+stall
+</code></pre><h3 id="处理epoll-events">
+  处理epoll events
+  <a class="anchor" href="#%e5%a4%84%e7%90%86epoll-events">#</a>
+</h3>
+<p>在处理网络事件（epoll events）时，策略的选择问题</p>
+<ol>
+<li>
+<p>由listener自己处理事件，还是由listener唤醒等待队列中的idle工作线程来处理事件</p>
+<p>从时间片和上下文切换上来看，listener自己处理更加高效：时间片轮转到了listener，不用浪费不说，再把事件交给其他人处理引入额外的消息传递和上下文切换的代价，一定程度上需要避免唤醒，减少代价。</p>
+<p>但是另一方面，listener离开处理事件，势必会有一个时间窗口无法监听网络事件，其他worker可以在这个时间窗口内自取一个事件，以提高效率，即利用率分到的时间片，也没有引入listener的唤醒代价。</p>
+<p>所以综合考虑，如果不繁忙（这里指的是网络事件很多，建链/请求），则由listener亲自处理事件，否则唤醒工作线程处理事件</p>
+</li>
+<li>
+<p>如果繁忙（queue不为空），需要唤醒多少个工作线程
+在理想情况下（可以快速处理完，不出现wait），只需要一个active工作线程即可，即&quot;one active thread per group&quot;。</p>
+</li>
+</ol>
+<p>综上所述，worker_thread的工作流程如下：</p>
+<p><img src="/MySQL_ThreadPool_Worker_Schedule.png" alt="MySQL_ThreadPool_Worker_Schedule" /></p>
+<h3 id="pthread-allocation-throttle">
+  pthread allocation throttle
+  <a class="anchor" href="#pthread-allocation-throttle">#</a>
+</h3>
+<p>这里的allocate特指pthread的数量控制，特指工作线程的创建限制，策略包括：</p>
+<ol>
+<li>
+<p>整体：数量上限（threadpool_max_threads）</p>
+</li>
+<li>
+<p>局部：每个线程组</p>
+<p>每个线程组不能超过connection数量</p>
+<p>如果当前没有活跃的（active = 0），立即创建</p>
+<p>其他情况下，pthread的创建要受到时间间隔的约束：</p>
+<p>0 ~ 3，立即创建</p>
+<p>4 ~ 7，50ms</p>
+<p>8 ~ 15，100ms</p>
+<p>&gt; 16 ，200ms</p>
+</li>
+</ol>
+<h2 id="请求调度">
+  请求调度
+  <a class="anchor" href="#%e8%af%b7%e6%b1%82%e8%b0%83%e5%ba%a6">#</a>
+</h2>
+<p>在connection的请求调度上，要尽量兼顾公平和效率。</p>
+<p>公平性：</p>
+<ul>
+<li>THD需要被均匀的分配到pthread上</li>
+<li>造成stall的请求，其connection可以被主动kill掉</li>
+</ul>
+<p>高效率：</p>
+<ul>
+<li>尽可能快的相应connection的请求</li>
+<li>connection上的请求可以通过快速通道，优先被pthread处理</li>
+</ul>
+<blockquote class="book-hint info">
+  pthread在处理完connection的一次请求之前，不能处理其他connection的请求。
+</blockquote>
+
+<h3 id="过载-overload">
+  过载 overload
+  <a class="anchor" href="#%e8%bf%87%e8%bd%bd-overload">#</a>
+</h3>
+<p>这里的overload可以细分为两种情况：</p>
+<ul>
+<li>too many：未达到CPU bound，但active工作线程数量过大，且没有出现stall，这时工作线程不处理数据，直接进入waiting_threads，等待idle timeout关闭pthread</li>
+<li>too busy：即达到CPU bound或者出现stall（lock/sync/net），此时active+waiting过大，这时优先处理高优先级队列。并对高优队列进行配额管理；同时对stall timeout的进行关闭connection。</li>
+</ul>
+<h3 id="高优先级调度">
+  高优先级调度
+  <a class="anchor" href="#%e9%ab%98%e4%bc%98%e5%85%88%e7%ba%a7%e8%b0%83%e5%ba%a6">#</a>
+</h3>
+<p>可以进入高优队列的：</p>
+<ul>
+<li>高优先级语句</li>
+<li>高优先级事务&amp;配额范围内&amp;活跃事务&amp;持有lock</li>
+</ul>
+<p>在worker处理队列时，首先从高优队列中取请求，然后再从普通队列中取。</p>
+<h2 id="idle超时处理">
+  idle超时处理
+  <a class="anchor" href="#idle%e8%b6%85%e6%97%b6%e5%a4%84%e7%90%86">#</a>
+</h2>
+<p>idle超时后，需要通过VIO模块关闭用户的connection。</p>
+<p>在线程池实现中，进行以下调整：</p>
+<ol>
+<li>增加vio_cancel，用于thread pool定时器检测超时和sql超时时调用</li>
+<li>shutdown（传入how=SHUT_RDWR）转而调用vio_cancel，进行全关闭</li>
+<li>实现vio_cancel，实现protocol+how</li>
+<li>对socket io read/write等待提供回调钩子</li>
+</ol>
+<h3 id="vio-implemenation">
+  VIO implemenation
+  <a class="anchor" href="#vio-implemenation">#</a>
+</h3>
+<p>include/violite.h</p>
+<ul>
+<li>增加vio_cancel</li>
+<li>shutdown(+how)</li>
+<li>提供毁掉钩子注册vio_set_wait_callback</li>
+<li>增加vio-&gt;thread_id，用于vio_shutdown（Windows only），+vio_set_thread_id()</li>
+</ul>
+<p>vio/vio_priv.h</p>
+<ul>
+<li>修改vio_ssl_shutdown(传入how)，内部调用shutdown(传入how)</li>
+</ul>
+<p>vio/viosocket.c</p>
+<ul>
+<li>修改vio_shutdown
+将shutdown(fd, SHUT_RDWR)修改为vio_cancel（+），即封装shutdown系统调用（可以传入how控制关闭行为）</li>
+<li>注册socket io回调</li>
+</ul>
+<p>vio/vio.c</p>
+<ul>
+<li>注册vio-&gt;viocancel</li>
+<li>原来的shutdown显式传入SHUT_RDWR</li>
+</ul>
+<p>vio/vioshm.c vio/viopipe.c</p>
+<ul>
+<li>实现named pipe和shared memory protocol下的viocancel</li>
+<li>适配shutdown(how)</li>
+</ul>
+<p>sql/protocol_classic.cc</p>
+<ul>
+<li>Protocol_classic::shutdown调用vio→shutdown(SHUT_RDWR)</li>
+</ul>
+<p>rapid/plugin/x/ngs/ngs_common/connection_vio.cc</p>
+<ul>
+<li>适配vio→shutdown(SHUT_RDWR)</li>
+</ul>
+<blockquote class="book-hint warning">
+  <p>TCP的&quot;四次握手&quot;关闭. TCP是全双工的信道, 可以看作两条单工信道, TCP连接两端的两个端点各负责一条. 当对端调用close时, 虽然本意是关闭整个两条信道, 但本端只是收到FIN包. 按照TCP协议的语义, 表示对端只是关闭了其所负责的那一条单工信道, 仍然可以继续接收数据. 也就是说, 因为TCP协议的限制, 一个端点无法获知对端的socket是调用了close还是shutdown.</p>
+<p>The shutdown() call causes all or part of a full-duplex connection on the socket associated with sockfd to be shut down.</p>
+<ul>
+<li>SHUT_RD, further receptions will be disallowed.</li>
+<li>SHUT_WR, further transmissions will be disallowed.</li>
+<li>SHUT_RDWR, further receptions and transmissions will be disallowed.</li>
+</ul>
+<p><a href="https://man7.org/linux/man-pages/man2/shutdown.2.html">https://man7.org/linux/man-pages/man2/shutdown.2.html</a></p>
+
+</blockquote>
+
+<h2 id="stall感知">
+  stall感知
+  <a class="anchor" href="#stall%e6%84%9f%e7%9f%a5">#</a>
+</h2>
+<p>线程池方案中，由于用户连接和线程的m:n模型，以及pthread在没有处理完当前用户请求之前不能处理其他连接上的请求这两个背景，需要感知当前处理中的线程是否有等待发生，以便线程池对等待进行介入，进行pthread的调度。</p>
+<p>实际上，MySQL本身已经设计了等待回调的机制。我们先来了解现有的等待回调机制，然后结合线程池的实现，进行对接和调度控制。</p>
+<h3 id="相关知识">
+  相关知识
+  <a class="anchor" href="#%e7%9b%b8%e5%85%b3%e7%9f%a5%e8%af%86">#</a>
+</h3>
+<h4 id="thd">
+  THD
+  <a class="anchor" href="#thd">#</a>
+</h4>
+<p>THD可以看做运行时对象，对于MySQL来说，一个运行单元（通常为线程），在内存中通过THD对象来描述。</p>
+<h4 id="thr_lock">
+  thr_lock
+  <a class="anchor" href="#thr_lock">#</a>
+</h4>
+<p>MySQL中的运行单元THD对于操作系统来说是通过Posix pthread作为载体的。MySQL将pthread的read lock和write lock封装为thr_lock，并提供了一个函数回调用于在phread lock wait前后上报。</p>
+<p>回调函数：</p>
+<pre><code>static void (*before_lock_wait)(void)= 0;
+static void (*after_lock_wait)(void)= 0;
+</code></pre><p>注册回调：</p>
+<pre><code>void thr_set_lock_wait_callback(void (*before_wait)(void),
+                                void (*after_wait)(void))
+{
+  before_lock_wait= before_wait;
+  after_lock_wait= after_wait;
+}
+</code></pre><p>触发回调：</p>
+<pre><code>thr_multi_lock
+  thr_lock
+    wait_for_lock
+      before_lock_wait
+      enter_cond_hook...
+      after_lock_wait
+</code></pre><p>MySQL Server层的lock是通过thr_lock实现的，统一通过thr_multi_lock来进行检测来避免死锁。</p>
+<h3 id="现有的等待回调设计">
+  现有的等待回调设计
+  <a class="anchor" href="#%e7%8e%b0%e6%9c%89%e7%9a%84%e7%ad%89%e5%be%85%e5%9b%9e%e8%b0%83%e8%ae%be%e8%ae%a1">#</a>
+</h3>
+<h4 id="等待">
+  等待
+  <a class="anchor" href="#%e7%ad%89%e5%be%85">#</a>
+</h4>
+<p>在DBMS的运行中，可能会出现各种stall/sleep，都会产生等待。</p>
+<p>在线程池场景中，需要在当前THD出现等待时，通过上报等待机制，感知到有等待发生，从而可以选择是否启动新的pthread，还是唤醒现有的pthread，以便让CPU可以执行其他任务。在这里，需要考虑保证新调度上CPU的线程预期收益必须高于其付出的成本（CPU cache miss），所以，应该只上报中长时间的等待，以便使收益高于成本。</p>
+<p>按照等待时长可分为：</p>
+<ul>
+<li>short wait：   比如mutex</li>
+<li>medium wait：比如disk io</li>
+<li>large wait：   比如row/table lock</li>
+</ul>
+<p>诸如mutex之类的short wait，就不应该（无需）上报。而诸如row lock、table lock、global read lock、mdl lock，可能会等待毫秒甚至秒级别，就需要进行上报。</p>
+<p>在MySQL当前的处理模型中，在thread pool模式下，当线程即将进入stall/sleep时，threadpool调度器应该选择创建线程、或者将其他线程唤醒，以调度的方式让CPU执行多任务，以保证效率、提高性能。</p>
+<p>对于中长等待，MySQL封装了以下的等待事件类型（wait_type）：</p>
+<pre><code>THD_WAIT_SLEEP= 1,
+THD_WAIT_DISKIO= 2,
+THD_WAIT_ROW_LOCK= 3,
+THD_WAIT_GLOBAL_LOCK= 4,        // 未使用
+THD_WAIT_META_DATA_LOCK= 5,
+THD_WAIT_TABLE_LOCK= 6,
+THD_WAIT_USER_LOCK= 7,
+THD_WAIT_BINLOG= 8,
+THD_WAIT_GROUP_COMMIT= 9,       // 未使用
+THD_WAIT_SYNC= 10,
+THD_WAIT_LAST= 11
+</code></pre><h4 id="等待开始和结束的接口">
+  等待开始和结束的接口
+  <a class="anchor" href="#%e7%ad%89%e5%be%85%e5%bc%80%e5%a7%8b%e5%92%8c%e7%bb%93%e6%9d%9f%e7%9a%84%e6%8e%a5%e5%8f%a3">#</a>
+</h4>
+<p>提供以下接口用于声明等待开始和等待结束：</p>
+<ul>
+<li>thd_wait_begin(thd, wait_type);</li>
+<li>thd_wait_end(thd);</li>
+</ul>
+<p>service_thd_wait.h只负责声明函数（接口），即挂钩。具体的实现由各个模块负责实现，即上钩后的动作。</p>
+<p>挂钩的地方（#include &lt;mysql/service_thd_wait.h&gt;）</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">等待类型</th>
+<th style="text-align:left">使用模块</th>
+<th style="text-align:left">开始等待</th>
+<th style="text-align:left">结束等待</th>
+<th style="text-align:left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">THD_WAIT_BINLOG</td>
+<td style="text-align:left">sql/rpl/</td>
+<td style="text-align:left">thd_wait_begin(thd, THD_WAIT_BINLOG);</td>
+<td style="text-align:left">thd_wait_end(thd);</td>
+<td style="text-align:left">等待SQL Thread执行到等待的点位(pos/gtid)</td>
+</tr>
+<tr>
+<td style="text-align:left">THD_WAIT_DISKIO</td>
+<td style="text-align:left">innobase/buf/buf0fluinnobase/buf/buf0rea</td>
+<td style="text-align:left">thd_wait_begin(NULL, THD_WAIT_DISKIO);thd_wait_begin(NULL, THD_WAIT_DISKIO);</td>
+<td style="text-align:left">thd_wait_end(NULL);thd_wait_end(NULL);</td>
+<td style="text-align:left">InnoDB flush pageInnoDB read page</td>
+</tr>
+<tr>
+<td style="text-align:left">THD_WAIT_META_DATA_LOCK</td>
+<td style="text-align:left">sql/mdl/</td>
+<td style="text-align:left">thd_wait_begin(NULL, THD_WAIT_META_DATA_LOCK);</td>
+<td style="text-align:left">thd_wait_end(NULL);</td>
+<td style="text-align:left">mdl锁等待</td>
+</tr>
+<tr>
+<td style="text-align:left">THD_WAIT_ROW_LOCK</td>
+<td style="text-align:left">innobase/lock/lock0wait</td>
+<td style="text-align:left">thd_wait_begin(trx-&gt;mysql_thd, THD_WAIT_ROW_LOCK);</td>
+<td style="text-align:left">thd_wait_end(trx-&gt;mysql_thd);</td>
+<td style="text-align:left">InnoDB等待行锁</td>
+</tr>
+<tr>
+<td style="text-align:left">THD_WAIT_TABLE_LOCK</td>
+<td style="text-align:left">innobase/lock/lock0wait</td>
+<td style="text-align:left">thd_wait_begin(trx-&gt;mysql_thd, THD_WAIT_TABLE_LOCK);</td>
+<td style="text-align:left">thd_wait_end(trx-&gt;mysql_thd);</td>
+<td style="text-align:left">InnoDB等待表锁</td>
+</tr>
+<tr>
+<td style="text-align:left">THD_WAIT_USER_LOCK</td>
+<td style="text-align:left">innobase/srv/srv0conc</td>
+<td style="text-align:left">thd_wait_begin(trx-&gt;mysql_thd, THD_WAIT_USER_LOCK);</td>
+<td style="text-align:left">thd_wait_end(trx-&gt;mysql_thd);</td>
+<td style="text-align:left">server层进入InnoDB时控制并发(thread_currency)，InnoDB handler虚函数调用</td>
+</tr>
+</tbody>
+</table>
+<p>对于conn_mgr (connection_handler_manager.cc)，通过THD_event_functions封装了回调，除了之前定义的开始等待、结束等待之外，并提供了一个额外的扩展接口（post_kill_notification）：</p>
+<pre><code>struct THD_event_functions
+{
+  void (*thd_wait_begin)(THD* thd, int wait_type);
+  void (*thd_wait_end)(THD* thd);
+  void (*post_kill_notification)(THD* thd);
+};
+</code></pre><p>conn_mgr在init时注册了pthread lock的等待回调：</p>
+<p><strong>Connection_handler_manager::init()</strong></p>
+<pre><code>// Init common callback functions.
+thr_set_lock_wait_callback(scheduler_wait_lock_begin,
+                           scheduler_wait_lock_end);
+thr_set_sync_wait_callback(scheduler_wait_sync_begin,
+                           scheduler_wait_sync_end);
+</code></pre><h4 id="接口实现">
+  接口实现
+  <a class="anchor" href="#%e6%8e%a5%e5%8f%a3%e5%ae%9e%e7%8e%b0">#</a>
+</h4>
+<p>在sql_class.cc中，除了实现以上2个接口外，还实现了行锁等待下的死锁检测（thd_report_row_lock_wait）。</p>
+<pre><code>#ifndef EMBEDDED_LIBRARY
+extern &quot;C&quot; void thd_wait_begin(MYSQL_THD thd, int wait_type)
+{
+  MYSQL_CALLBACK(Connection_handler_manager::event_functions,
+                 thd_wait_begin, (thd, wait_type));
+}
+ 
+/**
+  Interface for MySQL Server, plugins and storage engines to report
+  when they waking up from a sleep/stall.
+ 
+  @param  thd   Thread handle
+*/
+extern &quot;C&quot; void thd_wait_end(MYSQL_THD thd)
+{
+  MYSQL_CALLBACK(Connection_handler_manager::event_functions,
+                 thd_wait_end, (thd));
+}
+ 
+void thd_report_row_lock_wait(THD* self, THD *wait_for)
+{
+  DBUG_ENTER(&quot;thd_report_row_lock_wait&quot;);
+ 
+  if (self != NULL &amp;&amp; wait_for != NULL &amp;&amp;
+      is_mts_worker(self) &amp;&amp; is_mts_worker(wait_for))
+    commit_order_manager_check_deadlock(self, wait_for);
+ 
+  DBUG_VOID_RETURN;
+}
+ 
+#else
+no-op // 空实现 thd_wait_begin / thd_wait_end / thd_report_row_lock_wait
+</code></pre><p>我们从上面可以看到，MYSQL_CALLBACK宏定义了等待发生时的回调方法，即当等待发生时调用OBJ.FUNC(PARAMS)</p>
+<pre><code>#define MYSQL_CALLBACK(OBJ, FUNC, PARAMS)         \
+  do {                                            \
+    if ((OBJ) &amp;&amp; ((OBJ)-&gt;FUNC))                   \
+      (OBJ)-&gt;FUNC PARAMS;                         \
+  } while (0)
+</code></pre><p>挂钩之处：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">代码</th>
+<th style="text-align:left"></th>
+<th style="text-align:left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">sql_class</td>
+<td style="text-align:left">MYSQL_CALLBACK(Connection_handler_manager::event_functions, thd_wait_begin, (thd, wait_type));</td>
+<td style="text-align:left">thd_wait_begin挂钩的地方</td>
+</tr>
+<tr>
+<td style="text-align:left">Set_kill_conn::virtual void operator()</td>
+<td style="text-align:left">MYSQL_CALLBACK(Connection_handler_manager::event_functions, post_kill_notification, (killing_thd));</td>
+<td style="text-align:left">kill连接</td>
+</tr>
+<tr>
+<td style="text-align:left">THD::awake</td>
+<td style="text-align:left">MYSQL_CALLBACK(Connection_handler_manager::event_functions, post_kill_notification, (this));</td>
+<td style="text-align:left">THD被theadpool调度器唤醒</td>
+</tr>
+<tr>
+<td style="text-align:left">Connection_handler_manager::init()</td>
+<td style="text-align:left">MYSQL_CALLBACK(Connection_handler_manager::event_functions, thd_wait_begin, (current_thd, THD_WAIT_TABLE_LOCK));MYSQL_CALLBACK(Connection_handler_manager::event_functions, thd_wait_begin, (current_thd, THD_WAIT_SYNC));</td>
+<td style="text-align:left">处理HD_WAIT_TABLE_LOCK处理THD_WAIT_SYNC</td>
+</tr>
+</tbody>
+</table>
+<p>但是，Connection_handler_manager::event_functions没有注册任何函数用于对应实现，可以认为官方只是设置好了钩子，只待thread pool实现之。</p>
+<h3 id="线程池回调对接和实现">
+  线程池回调对接和实现
+  <a class="anchor" href="#%e7%ba%bf%e7%a8%8b%e6%b1%a0%e5%9b%9e%e8%b0%83%e5%af%b9%e6%8e%a5%e5%92%8c%e5%ae%9e%e7%8e%b0">#</a>
+</h3>
+<h4 id="定义上钩实现">
+  定义上钩实现
+  <a class="anchor" href="#%e5%ae%9a%e4%b9%89%e4%b8%8a%e9%92%a9%e5%ae%9e%e7%8e%b0">#</a>
+</h4>
+<pre><code>THD_event_functions tp_event_functions=
+{
+  tp_wait_begin, tp_wait_end, tp_post_kill_notification
+};
+</code></pre><h4 id="thd适配">
+  THD适配
+  <a class="anchor" href="#thd%e9%80%82%e9%85%8d">#</a>
+</h4>
+<p>THD</p>
+<p><strong>sql/sql_class.h</strong></p>
+<pre><code>THD_event_functions *scheduler; // 增加 回调函数集合
+thd_scheduler event_scheduler;  // 改名 THD调度回来需要的数据，connection
+</code></pre><p>THD ctor</p>
+<p><strong>sql/sql_class.cc</strong></p>
+<pre><code>scheduler= NULL;
+event_scheduler.data= 0;
+</code></pre><p>THD getter/settter // 改名</p>
+<p><strong>sql/sql_class.cc</strong></p>
+<pre><code>void *thd_get_scheduler_data(THD *thd)
+{
+  return thd-&gt;event_scheduler.data;
+}
+ 
+void thd_set_scheduler_data(THD *thd, void *data)
+{
+  thd-&gt;event_scheduler.data= data;
+}
+</code></pre><p>THD members赋值（tp_conn_handler::add_connection）</p>
+<p><strong>Thread_pool_connection_handler::add_connection()</strong></p>
+<pre><code>thd-&gt;scheduler= &amp;tp_event_functions;
+ 
+thd-&gt;event_scheduler.data= connection;
+</code></pre><h4 id="挂钩">
+  挂钩
+  <a class="anchor" href="#%e6%8c%82%e9%92%a9">#</a>
+</h4>
+<p>增加了一种等待类型：THD_WAIT_NET，用于描述VIO socket的读写等待，并挂钩。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">等待类型</th>
+<th style="text-align:left">使用模块</th>
+<th style="text-align:left">开始等待</th>
+<th style="text-align:left">结束等待</th>
+<th style="text-align:left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">THD_WAIT_NET</td>
+<td style="text-align:left">vio/viosocket</td>
+<td style="text-align:left">START_SOCKET_WAIT</td>
+<td style="text-align:left">END_SOCKET_WAIT</td>
+<td style="text-align:left">VIO socket的读写等待</td>
+</tr>
+</tbody>
+</table>
+<p>修改现有挂钩之处：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">代码</th>
+<th style="text-align:left"></th>
+<th style="text-align:left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">sql_class</td>
+<td style="text-align:left">MYSQL_CALLBACK(thd-&gt;scheduler, thd_wait_begin, (thd, wait_type));</td>
+<td style="text-align:left">thd_wait_begin挂钩的地方</td>
+</tr>
+<tr>
+<td style="text-align:left">Set_kill_conn::virtual void operator()</td>
+<td style="text-align:left">MYSQL_CALLBACK(killing_thd-&gt;scheduler, post_kill_notification, (killing_thd));</td>
+<td style="text-align:left">kill连接</td>
+</tr>
+<tr>
+<td style="text-align:left">THD::awake</td>
+<td style="text-align:left">MYSQL_CALLBACK(this-&gt;scheduler, post_kill_notification, (this));</td>
+<td style="text-align:left">THD被theadpool调度器唤醒</td>
+</tr>
+<tr>
+<td style="text-align:left">Connection_handler_manager::init()</td>
+<td style="text-align:left">MYSQL_CALLBACK(thd-&gt;scheduler, thd_wait_begin, (current_thd, THD_WAIT_TABLE_LOCK));MYSQL_CALLBACK(thd-&gt;scheduler, thd_wait_begin, (current_thd, THD_WAIT_SYNC));MYSQL_CALLBACK(thd-&gt;scheduler, thd_wait_begin, (thd, THD_WAIT_NET));</td>
+<td style="text-align:left">处理HD_WAIT_TABLE_LOCK处理THD_WAIT_SYNC增加THD_WAIT_NET</td>
+</tr>
+</tbody>
+</table>
+<p>实现：</p>
+<pre><code>void tp_wait_begin(THD *thd, int type) {
+  connection_t *connection = (connection_t *)thd-&gt;event_scheduler.data;
+  if (connection)
+  {
+     wait_begin(...);
+  }
+}
+ 
+void tp_wait_end(THD *thd) {
+  connection_t *connection = (connection_t *)thd-&gt;event_scheduler.data;
+  {
+     wait_end(...);
+  }
+}
+ 
+void tp_post_kill_notification(THD *thd)
+{
+  Vio* vio= thd-&gt;get_protocol_classic()-&gt;get_vio();
+  if (vio)
+    vio_cancel(vio, SHUT_RD);
+  DBUG_VOID_RETURN;
+}
+ 
+Thd_timeout_checker
+virtual void operator() (THD* thd) {
+  connection_t *connection= (connection_t *)thd-&gt;event_scheduler.data;
+}
+</code></pre><p>整体的THD事件回调如下图所示：</p>
+<p><img src="/MySQL_ThreadPool_thd_event_callback.png" alt="MySQL_ThreadPool_thd_event_callback" /></p>
+<h4 id="threadpool-callback-implementations">
+  ThreadPool callback implementations
+  <a class="anchor" href="#threadpool-callback-implementations">#</a>
+</h4>
+<p>service_thd_wait.h
+services.h.pp</p>
+<ul>
+<li>增加一种等待类型：THD_WAIT_NET</li>
+</ul>
+<p>sql/sql_class</p>
+<ul>
+<li>set_active_vio设置thread_id（用于windows）</li>
+<li>THD增加回调函数集合指针，回调数据改名。declear+ctor+get/set</li>
+<li>CALLBACK调整</li>
+</ul>
+<p><strong>vio_set_thread_id调用链</strong></p>
+<pre><code>login_connection
+  check_connection
+    set_active_vio
+      vio_set_thread_id
+</code></pre><p>conn_mgr</p>
+<ul>
+<li>CALLBACK调整</li>
+<li>THD_WAIT_NET注册接口（+）</li>
+</ul>
+<p>threadpool.h</p>
+<ul>
+<li>extern void tp_wait_begin(THD *, int);</li>
+<li>extern void tp_wait_end(THD*);</li>
+<li>extern void tp_post_kill_notification(THD *thd);</li>
+<li>extern THD_event_functions tp_event_functions;</li>
+</ul>
+<p>threadpool_common.cc</p>
+<pre><code>THD_event_functions tp_event_functions=
+{
+  tp_wait_begin, tp_wait_end, tp_post_kill_notification
+};
+</code></pre><p>threadpool.cc</p>
+<ul>
+<li>tp_wait_begin() -&gt; wait_begin()</li>
+<li>tp_wait_end() -&gt; wait_end()</li>
+<li>tp_post_kill_notification() -&gt; vio_cancel(vio, SHUT_RD)</li>
+</ul>
+<h2 id="定时器">
+  定时器
+  <a class="anchor" href="#%e5%ae%9a%e6%97%b6%e5%99%a8">#</a>
+</h2>
+<p>定时器设计为毫秒级精度，其提供以下功能：</p>
+<ol>
+<li>循环定时</li>
+<li>唤醒后巡检（stall、timeout）</li>
+</ol>
+<h3 id="stall检测">
+  stall检测
+  <a class="anchor" href="#stall%e6%a3%80%e6%b5%8b">#</a>
+</h3>
+<p>查漏补缺：没有listener（即listener正在处理事件），则唤醒/创建工作线程</p>
+<p>认定卡顿：队列堆积的方法是在每次stall巡检周期设置一个出队累计值。当处理过（出队累计值&gt;0）且队列</p>
+<p>仍有未处理的数据时，认定为stall</p>
+<p>快速响应：唤醒所有的idle线程，或者线程不足时补充线程（创建）</p>
+<p>洗心革面：在处理下一个事件时重置stall标记</p>
+<h3 id="timeout检测">
+  timeout检测
+  <a class="anchor" href="#timeout%e6%a3%80%e6%b5%8b">#</a>
+</h3>
+<p>其中，超时时间点计算方法为：当前唤醒时间点+stall+等待时间，即：</p>
+<pre><code>thd-&gt;wait_timeout = kill_idle_transaction_timeout / net_wait_timeout
+next = current + 1000 * stall + 1000000 * thd-&gt;wait_timeout
+</code></pre><p>这既是连接的超时时间点，同时，也是下一次的检查时间点。</p>
+<p>正确性：唤醒检查点和下一次检查点都需要加上memory barrier</p>
+<p>在保证定时器功能性的前提下，也需要考虑性能影响。为了避免在stall检测时，对正向路径的前端请求造成颠簸，这里采用try+lock的优雅方式进行检测。</p>
+<h2 id="统计信息">
+  统计信息
+  <a class="anchor" href="#%e7%bb%9f%e8%ae%a1%e4%bf%a1%e6%81%af">#</a>
+</h2>
+<p>thread_group.thread_count</p>
+<p>thread_group.active_thread_count</p>
+<p>num_worker_threads 当前全局线程数</p>
+<p>threadpool_max_threads 最大线程数</p>
+<h2 id="observability">
+  Observability
+  <a class="anchor" href="#observability">#</a>
+</h2>
+<p>增加状态：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">status</th>
+<th style="text-align:left">scope</th>
+<th style="text-align:left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">Threadpool_idle_threads</td>
+<td style="text-align:left">global</td>
+<td style="text-align:left">空闲线程数</td>
+</tr>
+<tr>
+<td style="text-align:left">Threadpool_threads</td>
+<td style="text-align:left">global</td>
+<td style="text-align:left">全局线程数（listener &amp; worker）</td>
+</tr>
+</tbody>
+</table>
+<h2 id="内部数据结构">
+  内部数据结构
+  <a class="anchor" href="#%e5%86%85%e9%83%a8%e6%95%b0%e6%8d%ae%e7%bb%93%e6%9e%84">#</a>
+</h2>
+<h3 id="对象">
+  对象
+  <a class="anchor" href="#%e5%af%b9%e8%b1%a1">#</a>
+</h3>
+<ul>
+<li>线程组数组 all_groups &lt;thread_group_t&gt;(128)</li>
+<li>线程组 thread_group_t</li>
+<li>连接 connection_t</li>
+<li>连接队列 connection_queue_t</li>
+<li>工作线程 worker_thread_t active/idle</li>
+<li>工作线程队列 worker_list_t</li>
+<li>定时器 pool_timer_t</li>
+</ul>
+<p>类图关系</p>
+<p><img src="/MySQL_ThreadPool_Class_Relationship_Diagram.png" alt="MySQL_ThreadPool_Class_Relationship_Diagram" /></p>
+<h3 id="生命周期">
+  生命周期
+  <a class="anchor" href="#%e7%94%9f%e5%91%bd%e5%91%a8%e6%9c%9f">#</a>
+</h3>
+<p>全局对象（static）</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">名称</th>
+<th style="text-align:left">类型</th>
+<th style="text-align:left">时机</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">线程组数组</td>
+<td style="text-align:left">all_groups &lt;thread_group_t&gt;(size)</td>
+<td style="text-align:left">tp_init/tp_end</td>
+</tr>
+<tr>
+<td style="text-align:left">活跃线程组大小</td>
+<td style="text-align:left">group_count</td>
+<td style="text-align:left">tp_init</td>
+</tr>
+<tr>
+<td style="text-align:left">线程组是否启动</td>
+<td style="text-align:left">threadpool_started</td>
+<td style="text-align:left">tp_init/tp_end</td>
+</tr>
+<tr>
+<td style="text-align:left">定时器</td>
+<td style="text-align:left">pool_timer</td>
+<td style="text-align:left">tp_init/tp_end</td>
+</tr>
+</tbody>
+</table>
+<h3 id="对象数据结构详解">
+  对象数据结构详解
+  <a class="anchor" href="#%e5%af%b9%e8%b1%a1%e6%95%b0%e6%8d%ae%e7%bb%93%e6%9e%84%e8%af%a6%e8%a7%a3">#</a>
+</h3>
+<p>线程组数组</p>
+<pre><code>all_groups &lt;thread_group_t&gt;(128)
+</code></pre><p>线程组 thread_group_t</p>
+<pre><code>mutex                                     互斥量，保护线程组对象
+pthread_attr                              线程私有变量
+pollfd                                    epollfd
+shutdown_pipe[2]                          用于关闭时通知listener
+connection_queue_t queue;                 普通队列（FIFO）
+connection_queue_t high_prio_queue;       高优队列（FIFO）
+worker_list_t waiting_threads;            空闲（等待）线程队列（FIFO）
+worker_thread_t *listener;                监听线程（listener）
+int  thread_count;                        已创建的工作线程数量
+int  active_thread_count;                 正在执行的工作线程数量
+int  connection_count;                    处理的连接数量（累计），处理新链接时++，调整线程组大小时调整
+int  waiting_thread_count;                等待的工作线程（lock/sync/net）
+int io_event_count;                       需要处理的epoll事件数量（epoll_wait返回的ev个数++）
+int queue_event_count;                    stall周期的出队次数
+ulonglong last_thread_creation_time;      最近的工作线程的创建时间
+bool shutdown;                            关闭线程池时设为true
+bool stalled;                             线程组是否出现了stall
+</code></pre><p>连接 connection_t</p>
+<pre><code>THD *thd;                                 对应的THD
+thread_group_t *thread_group;             对应的线程组
+connection_t *next_in_queue;
+connection_t **prev_in_queue;
+ulonglong abs_wait_timeout;               超时时间点
+bool logged_in;                           是否已经过应用建链，connection phase为false，command phase为true
+bool bound_to_poll_descriptor;            是否绑定到线程组对应的epollfd
+bool waiting;                             是否处于等待状态（lock/sync/wait）
+uint tickets;                             高优队列配额
+</code></pre><p>队列 connection_queue_t</p>
+<pre><code>typedef I_P_List&lt;connection_t,
+                 I_P_List_adapter&lt;connection_t,
+                                  &amp;connection_t::next_in_queue,
+                                  &amp;connection_t::prev_in_queue&gt;,
+                 I_P_List_null_counter,
+                 I_P_List_fast_push_back&lt;connection_t&gt; &gt;
+connection_queue_t;
+</code></pre><p>工作线程 worker_thread_t</p>
+<pre><code>ulonglong  event_count;                   处理的事件数量（累计）
+thread_group_t* thread_group;
+worker_thread_t *next_in_list;
+worker_thread_t **prev_in_list;
+mysql_cond_t  cond;
+bool          woken;                      进入waiting_threads睡去false，唤醒后为true
+</code></pre><p>工作线程队列 worker_list_t</p>
+<pre><code>typedef I_P_List&lt;worker_thread_t,
+                 I_P_List_adapter&lt;worker_thread_t,
+                                  &amp;worker_thread_t::next_in_list,
+                                  &amp;worker_thread_t::prev_in_list&gt; &gt;
+worker_list_t;
+</code></pre><p>定时器 pool_timer_t</p>
+<pre><code>mysql_mutex_t mutex;
+mysql_cond_t cond;
+volatile uint64 current_microtime;        唤醒时间点
+volatile uint64 next_timeout_check;       超时时间点，初始MAX
+int  tick_interval;                       stall时长，也是休眠时长
+bool shutdown;                            启动时设置为false，停止时设置为true，并通过cond通知
+</code></pre></article>
  
       
 
@@ -712,6 +1974,92 @@ https://github.com/alex-shpak/hugo-book
       </ul>
     </li>
     <li><a href="#high-level-design">High Level Design</a></li>
+    <li><a href="#low-level-design">Low Level Design</a>
+      <ul>
+        <li><a href="#模块分类">模块分类</a></li>
+        <li><a href="#线程池初始化和销毁">线程池初始化和销毁</a>
+          <ul>
+            <li><a href="#tp_conn_handler">tp_conn_handler</a></li>
+            <li><a href="#初始化线程池">初始化线程池</a></li>
+            <li><a href="#关闭线程池">关闭线程池</a></li>
+          </ul>
+        </li>
+        <li><a href="#连接处理">连接处理</a>
+          <ul>
+            <li><a href="#tcp建链连接处理">TCP建链&amp;连接处理</a></li>
+          </ul>
+        </li>
+        <li><a href="#thread和thd对接">thread和THD对接</a>
+          <ul>
+            <li><a href="#pthread的初始化">pthread的初始化</a></li>
+            <li><a href="#thd的创建和初始化">thd的创建和初始化</a></li>
+            <li><a href="#thd-attach">thd attach</a></li>
+            <li><a href="#处理请求">处理请求</a></li>
+            <li><a href="#销毁thd">销毁thd</a></li>
+            <li><a href="#销毁pthread">销毁pthread</a></li>
+          </ul>
+        </li>
+        <li><a href="#io-multiplexing">IO multiplexing</a></li>
+        <li><a href="#pthread调度">pthread调度</a>
+          <ul>
+            <li><a href="#pthread状态">pthread状态</a></li>
+            <li><a href="#处理epoll-events">处理epoll events</a></li>
+            <li><a href="#pthread-allocation-throttle">pthread allocation throttle</a></li>
+          </ul>
+        </li>
+        <li><a href="#请求调度">请求调度</a>
+          <ul>
+            <li><a href="#过载-overload">过载 overload</a></li>
+            <li><a href="#高优先级调度">高优先级调度</a></li>
+          </ul>
+        </li>
+        <li><a href="#idle超时处理">idle超时处理</a>
+          <ul>
+            <li><a href="#vio-implemenation">VIO implemenation</a></li>
+          </ul>
+        </li>
+        <li><a href="#stall感知">stall感知</a>
+          <ul>
+            <li><a href="#相关知识">相关知识</a>
+              <ul>
+                <li><a href="#thd">THD</a></li>
+                <li><a href="#thr_lock">thr_lock</a></li>
+              </ul>
+            </li>
+            <li><a href="#现有的等待回调设计">现有的等待回调设计</a>
+              <ul>
+                <li><a href="#等待">等待</a></li>
+                <li><a href="#等待开始和结束的接口">等待开始和结束的接口</a></li>
+                <li><a href="#接口实现">接口实现</a></li>
+              </ul>
+            </li>
+            <li><a href="#线程池回调对接和实现">线程池回调对接和实现</a>
+              <ul>
+                <li><a href="#定义上钩实现">定义上钩实现</a></li>
+                <li><a href="#thd适配">THD适配</a></li>
+                <li><a href="#挂钩">挂钩</a></li>
+                <li><a href="#threadpool-callback-implementations">ThreadPool callback implementations</a></li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+        <li><a href="#定时器">定时器</a>
+          <ul>
+            <li><a href="#stall检测">stall检测</a></li>
+            <li><a href="#timeout检测">timeout检测</a></li>
+          </ul>
+        </li>
+        <li><a href="#统计信息">统计信息</a></li>
+        <li><a href="#observability">Observability</a></li>
+        <li><a href="#内部数据结构">内部数据结构</a>
+          <ul>
+            <li><a href="#对象">对象</a></li>
+            <li><a href="#生命周期">生命周期</a></li>
+            <li><a href="#对象数据结构详解">对象数据结构详解</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
   </ul>
 </nav>
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="change buffer是InnoDB所特有的，设计思想非常先进，首先详细介绍change buffer的设计机制和实现细节，然后介绍其为了避免死锁所做的考虑。
+<meta name="description" content="change buffer是InnoDB所特有的。
 设计 #  change buffer目的是减少随机访问磁盘，提升non-unique secondary index（以下简称NUSI）的变更效率，在IO-bound workload下很有必要。
 在InnoDB中，数据顺序存储在clustered index的leaf node，secondary index leaf node则是离散的，因此，对seconary index leaf node的变更操作是随机IO。为了提升secondary index的磁盘IO效率，InnoDB的做法是采用写缓冲机制，将NUSI的变更操作缓冲下来（leaf page oriented），减少随机IO，并在合适的时机将多次对同一页的操作进行merge，这块缓存称为change buffer。
 当导入大量数据时，DBA常见的一个做法是，先disable keys，然后倒入数据后再enable keys，这也是减少随机IO手段的一个体现。  这里借用官方一张图，可以给大家带来直观的理解：
@@ -16,7 +16,7 @@ change buffer也是一颗B&#43; tree，这颗B&#43; tree的page也会使用buffe
  用户线程的DML 后台purge线程  对于读取来说，直接通过物理读读取NUSI的leaf page后，需要判断change buffer中是否已缓存变更操作（缓存该页的change buffer record），如果进行了缓存，要先merge change buffer，然后再读取leaf page中的record。">
 <meta name="theme-color" content="#FFFFFF">
 <meta name="color-scheme" content="light dark"><meta property="og:title" content="change buffer" />
-<meta property="og:description" content="change buffer是InnoDB所特有的，设计思想非常先进，首先详细介绍change buffer的设计机制和实现细节，然后介绍其为了避免死锁所做的考虑。
+<meta property="og:description" content="change buffer是InnoDB所特有的。
 设计 #  change buffer目的是减少随机访问磁盘，提升non-unique secondary index（以下简称NUSI）的变更效率，在IO-bound workload下很有必要。
 在InnoDB中，数据顺序存储在clustered index的leaf node，secondary index leaf node则是离散的，因此，对seconary index leaf node的变更操作是随机IO。为了提升secondary index的磁盘IO效率，InnoDB的做法是采用写缓冲机制，将NUSI的变更操作缓冲下来（leaf page oriented），减少随机IO，并在合适的时机将多次对同一页的操作进行merge，这块缓存称为change buffer。
 当导入大量数据时，DBA常见的一个做法是，先disable keys，然后倒入数据后再enable keys，这也是减少随机IO手段的一个体现。  这里借用官方一张图，可以给大家带来直观的理解：
@@ -37,7 +37,7 @@ change buffer也是一颗B&#43; tree，这颗B&#43; tree的page也会使用buffe
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.6a5a4d6fe24736cfc4f5220ebc4fae083b5763c0f43225964d1f9e2a60535079.js" integrity="sha256-alpNb&#43;JHNs/E9SIOvE&#43;uCDtXY8D0MiWWTR&#43;eKmBTUHk=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.5145e623761d7b8f5c9bce92d26a14a67e94c255e1e94ee68d160fbf51f8067c.js" integrity="sha256-UUXmI3Yde49cm86S0moUpn6UwlXh6U7mjRYPv1H4Bnw=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -97,7 +97,11 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/Server/user_connection_handler/">用户建链（转）</a></li>
 </ul>
 </li>
-<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a>
+<ul>
+<li><a href="/docs/MySQL/Server/kill_idle_transaction/">kill_idle_transaction</a></li>
+</ul>
+</li>
 <li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
 <li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
 <li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
@@ -120,7 +124,11 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/InnoDB/7_latch/">latch</a></li>
 <li><a href="/docs/MySQL/InnoDB/8_b+_tree/">B+ tree</a></li>
 <li><a href="/docs/MySQL/InnoDB/9_change_buffer/"class=active>change buffer</a></li>
-<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a></li>
+<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/10.1_mysql5.7.26_lock_issue/">MySQL 5.7.26锁问题</a></li>
+</ul>
+</li>
 <li><a href="/docs/MySQL/InnoDB/11_redo_log/">redo log</a></li>
 <li><a href="/docs/MySQL/InnoDB/12_transaction/">transaction</a></li>
 </ul>
@@ -225,7 +233,7 @@ https://github.com/alex-shpak/hugo-book
 
       
       
-  <article class="markdown"><p>change buffer是InnoDB所特有的，设计思想非常先进，首先详细介绍change buffer的设计机制和实现细节，然后介绍其为了避免死锁所做的考虑。</p>
+  <article class="markdown"><p>change buffer是InnoDB所特有的。</p>
 <h1 id="设计">
   设计
   <a class="anchor" href="#%e8%ae%be%e8%ae%a1">#</a>

@@ -89,6 +89,22 @@ MySQL 8.0.0 Release Notes
     
     <item>
       <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/kill_idle_transaction/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/kill_idle_transaction/</guid>
+      <description>1. 背景 #  我们在线上遇到5.7.26的锁问题，需要解决idle事务长时间挂起的问题。同时也调研了现有的mysql timeout机制，以确保其和现有的timeout机制可以吻合。
+Percona从5.1.59-13.0引入了innodb_kill_idle_transaction，用于解决长事务场景，即对idle事务设定一个超时时间，对超过该时间的事务所在的用户连接进行断开。
+引入该参数也可以防止purge线程的长时间阻塞（长事务会一直保持在活跃状态，则会导致purge长时间的等待，从而导致undo无法清理从而造成磁盘空间的不断增加）。
+在实现上，开始是通过扫描InnoDB事务列表来进行判断的，在Percona Server 5.6.35-80.0则改为判断connection socket read timeout。这样优化的好处是，巡检可能会造成CPU空跑，而基于socket select超时则发生超时才会触发，使代码的运行更有效率。
+另外，percona现在提供了两个参数：innodb_kill_idle_transaction（后者的alias，5.7中已标记为deprecated）和kill_idle_transaction。我们在port时只保留kill_idle_transaction。
+2. 设计 #  复用net_wait_timeout：
+ 处于事务中（SERVER_STATUS_IN_TRANS）&amp;amp; min(kill_idle_transaction, net_wait_timeout) 其他场景还是返回net_wait_timeout  kill_idle_transaction配置项
+   配置项 默认值 值范围     kill_idle_transaction 0（不开启） 0 ~ 1 year    3. 示例 #  1. 验证idle事务的连接会自动kill掉 mysql&amp;gt; show global variables like &#39;%idle%&#39;; +-----------------------+-------+ | Variable_name | Value | +-----------------------+-------+ | kill_idle_transaction | 10 | +-----------------------+-------+ mysql&amp;gt; begin; Query OK, 0 rows affected (0.</description>
+    </item>
+    
+    <item>
+      <title></title>
       <link>https://ayalastrike.github.io/docs/MySQL/Server/log/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       

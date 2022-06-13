@@ -27,7 +27,7 @@ spatial control 空间控制
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.6a5a4d6fe24736cfc4f5220ebc4fae083b5763c0f43225964d1f9e2a60535079.js" integrity="sha256-alpNb&#43;JHNs/E9SIOvE&#43;uCDtXY8D0MiWWTR&#43;eKmBTUHk=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.5145e623761d7b8f5c9bce92d26a14a67e94c255e1e94ee68d160fbf51f8067c.js" integrity="sha256-UUXmI3Yde49cm86S0moUpn6UwlXh6U7mjRYPv1H4Bnw=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -87,7 +87,11 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/Server/user_connection_handler/">用户建链（转）</a></li>
 </ul>
 </li>
-<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a></li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a>
+<ul>
+<li><a href="/docs/MySQL/Server/kill_idle_transaction/">kill_idle_transaction</a></li>
+</ul>
+</li>
 <li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
 <li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
 <li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
@@ -110,7 +114,11 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/InnoDB/7_latch/">latch</a></li>
 <li><a href="/docs/MySQL/InnoDB/8_b+_tree/">B+ tree</a></li>
 <li><a href="/docs/MySQL/InnoDB/9_change_buffer/">change buffer</a></li>
-<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a></li>
+<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/10.1_mysql5.7.26_lock_issue/">MySQL 5.7.26锁问题</a></li>
+</ul>
+</li>
 <li><a href="/docs/MySQL/InnoDB/11_redo_log/">redo log</a></li>
 <li><a href="/docs/MySQL/InnoDB/12_transaction/">transaction</a></li>
 </ul>
@@ -314,6 +322,10 @@ https://github.com/alex-shpak/hugo-book
 <p>PCB和其中的meta、frame（数据页）之间的关系如下图所示：</p>
 <p><img src="/InnoDB_buffer_pool_page_&amp;_block.png" alt="InnoDB_buffer_pool_page_&amp;amp;_block" /></p>
 <p>从上面的内存布局可以看出，PCB中的第一个字段（必须）是meta，以保证page table指向的buf_block_t和buf_page_t两种类型的指针可以相互转换，block→frame指向真正存放数据的数据页。</p>
+<blockquote class="book-hint info">
+  现代操作系统在分配内存时也不会把&quot;真正&quot;的内存给用户，也是通过control block的方式进行管理的。
+</blockquote>
+
 <p>meta中的元信息有：page size、state、oldest_modification、newest_modification、access_time&hellip;，对于压缩页，解压后的实际数据指针也是用frame指向。</p>
 <blockquote class="book-hint danger">
   这里给读者留一个问题：frame和PCB的生命周期是一致的吗？
@@ -362,8 +374,8 @@ https://github.com/alex-shpak/hugo-book
 <p>buffer pool中的内存空间以页的倍数来申请，即以页为单位进行管理。</p>
 <p>在InnoDB中，页通常通过free、LRU和flush这三个逻辑链表组织并管理起来。free链表用于保存未使用的页，当free链表中的页用尽后，则根据LRU算法淘汰已经使用的页，最频繁使用的页在LRU链表的头部，最少使用的页在LRU链表的尾部。</p>
 <p>在InnoDB的LRU链表设计中（LRU-K），通过加入midpoint位点划分出老区（历史队列）和新区（缓冲区）。新读取到的页，虽然是最近访问的页，并不直接放到LRU链表的头部，而是放到midpoint的（默认3/8）位置，这种算法在InnoDB中称为midpoint insertion strategy。这样做而不采用朴素的LRU算法的原因，是因为某些低频但是数据量大的SQL操作或者预读可能会将缓冲池中频繁使用的页刷出（sequential flooding），从而影响缓冲池的效率。</p>
-<p>此外，有些页不属于数据页或索引页，从free链表申请，但使用完毕后，并不放入LRU链表，比如AHI，lock info。</p>
-<p>例如在下面的例子中，buffer pool - free - LRU = 65528 - 43916 - 21603 = 9，还缺少9个页，这些页其实分配给了AHI：</p>
+<p>此外，有些页不属于数据页或索引页，从free链表申请，但使用完毕后，并不放入LRU链表，比如AHI，lock info等等。</p>
+<p>比如，在下面的例子中，buffer pool - free - LRU = 65528 - 43916 - 21603 = 9，还缺少9个页，这些页其实分配给了AHI：</p>
 <pre><code>----------------------
 BUFFER POOL AND MEMORY
 ----------------------
@@ -719,7 +731,6 @@ if (bpage-&gt;oldest_modification == 0
 <p>尾部evict</p>
 <p>如图所示：</p>
 <p><img src="/InnoDB_buffer_pool_LRU_list.png" alt="InnoDB_buffer_pool_LRU_list" /></p>
-<p><img src="/InnoDB_buffer_pool_LRU.png" alt="InnoDB_buffer_pool_LRU" /></p>
 <p>LRU相关的函数调用链如下：</p>
 <p><img src="/InnoDB_buffer_pool_LRU_chain.png" alt="InnoDB_buffer_pool_LRU_chain" /></p>
 <blockquote class="book-hint danger">
@@ -869,7 +880,9 @@ if (bpage-&gt;oldest_modification == 0
   <span style="color:#0f0">// 11. 返回PCB
 </span><span style="color:#0f0"></span>  <span style="color:#f00">return</span> (bpage);
 }
-</code></pre></div><p>这里注意两点：</p>
+</code></pre></div><p>从这里可以看出，对于页面的物理访问的并发保护如下图所示：</p>
+<p><img src="/InnoDB_buffer_pool_fetch_page.png" alt="InnoDB_buffer_pool_fetch_page" /></p>
+<p>这里注意两点：</p>
 <ul>
 <li>对buffer pool的保护在最外面，是为了其中的free list、LRU list和flush list的保护</li>
 <li>block-&gt;mutex只是为了保护io_fix和buf_fix_count，数据页（内容）的保护通过frame lock来保证，这个直到io完成才释放</li>

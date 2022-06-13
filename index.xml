@@ -26,6 +26,19 @@
     
     <item>
       <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/10.1_mysql5.7.26_lock_issue/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/10.1_mysql5.7.26_lock_issue/</guid>
+      <description>线上问题 #  在MySQL 5.7.26中，线上遇到如下问题：
+在insert时出现大量的用户线程等待，经排查dbproxy查询日志，发现所有的用户线程都在等待这个insert释放锁：
+insert into account_m.transaction_bill_493 (transaction_id,transaction_type,business_type,amount,user_id,user_name,user_phone,partner_id,account_type,partner_user_id,partner_user_name,partner_user_phone,partner_partner_id,partner_account_type,product_line,status,create_time,freeze_time,rollback_time,commit_time,refund_time,remark,extra_field, refund_amount,origin_transaction,transaction_desc,order_amount,account_id,sub_type,partner_account_id,partner_sub_type, currency,attach) values (&amp;lsquo;251_202103112460775602597789&amp;rsquo;,3,&#39;&#39;,200,&amp;lsquo;10811426065435&amp;rsquo;,&#39;&#39;,&#39;&#39;,&amp;lsquo;2510000000&amp;rsquo;,4,&amp;lsquo;17593398603669&amp;rsquo;,&#39;&#39;,&#39;&#39;,&#39;&#39;,1,251,3,&amp;lsquo;2021-03-11 12:18:57&amp;rsquo;,&amp;lsquo;1970-01-01 08:00:00&amp;rsquo;,&amp;lsquo;1970-01-01 08:00:00&amp;rsquo;,&amp;lsquo;2021-03-11 12:18:57&amp;rsquo;,&amp;lsquo;1970-01-01 08:00:00&amp;rsquo;,&#39;&#39;,&#39;&#39;, 0,&#39;&#39;,&#39;{&amp;ldquo;title&amp;rdquo;:&amp;quot;&amp;quot;,&amp;ldquo;subTitle&amp;rdquo;:&amp;quot;&amp;quot;}&#39;,0,&amp;lsquo;10000400006810811426065435&amp;rsquo;,100,&amp;lsquo;10000100000017593398603669&amp;rsquo;,100,0,&#39;&#39;)
+account_m.transaction_bill_493表结构如下：
+CREATE TABLE `transaction_bill_493` ( `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT &#39;自增主键&#39;, `transaction_type` tinyint(4) unsigned NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;交易类型&#39;, `transaction_id` varchar(64) NOT NULL COMMENT &#39;交易ID，外部传入&#39;, `amount` bigint(20) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;金额&#39;, `refund_amount` bigint(20) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;退款金额&#39;, `origin_transaction` varchar(64) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;退款时使用，原始订单，id|type|partner_id&#39;, `user_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;用户ID&#39;, `user_name` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;用户姓名&#39;, `user_phone` varchar(16) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;用户电话&#39;, `partner_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;商户ID&#39;, `account_type` tinyint(3) unsigned NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;账户类型&#39;, `partner_user_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易对象ID&#39;, `partner_user_name` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易对象姓名&#39;, `partner_user_phone` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易对象电话&#39;, `partner_partner_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易对象商户ID&#39;, `partner_account_type` tinyint(3) unsigned NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;交易对象类型&#39;, `product_line` smallint(6) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;产品线ID&#39;, `status` tinyint(4) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;状态（1完成；2冻结；3：解冻；）&#39;, `create_time` datetime DEFAULT NULL COMMENT &#39;记录生成时间&#39;, `freeze_time` datetime DEFAULT NULL COMMENT &#39;&amp;gt;冻结时间&#39;, `rollback_time` datetime DEFAULT NULL COMMENT &#39;解冻时间&#39;, `commit_time` datetime DEFAULT NULL COMMENT &#39;扣款时间&#39;, `refund_time` datetime DEFAULT NULL COMMENT &#39;退款时间&#39;, `remark` varchar(2048) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;备注&#39;, `extra_field` varchar(64) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;扩展字段&#39;, `transaction_desc` varchar(256) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;交易描述&#39;, `order_amount` bigint(20) unsigned NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;订单金额分&#39;, `account_id` varchar(64) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;è´¦æˆ- ID&#39;, `sub_type` int(11) NOT NULL DEFAULT &#39;100&#39; COMMENT &#39;账户类型，默认是可用资金账户类型&#39;, `partner_account_id` varchar(64) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;partner账户ID&#39;, `partner_sub_type` int(11) NOT NULL DEFAULT &#39;100&#39; COMMENT &#39;partner账户类型，默认是可用资金账户类型&#39;, `out_order_id` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;外部订单ID&#39;, `bank_card` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;银行卡号&#39;, `business_type` varchar(32) NOT NULL DEFAULT &#39;&#39; COMMENT &#39;业务类型&#39;, `currency` int(11) NOT NULL DEFAULT &#39;0&#39; COMMENT &#39;币种&#39;, `attach` varchar(2048) CHARACTER SET utf8 COLLATE utf8_bin NOT NULL DEFAULT &#39;&#39; COMMENT &#39;扩展字段, 存储业务透传信息&#39;, PRIMARY KEY (`id`), UNIQUE KEY `uk_transid_accountid` (`transaction_id`,`account_id`), KEY `idx_user_id` (`user_id`), KEY `idx_create_time` (`create_time`), KEY `idx_status_freeze_time` (`status`,`freeze_time`), KEY `idx_status_commit_time` (`status`,`commit_time`), KEY `idx_freeze_time` (`freeze_time`), KEY `idx_accountid` (`account_id`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT=&#39;交易单表&#39; 事后经过复盘，线上当时发生问题时，业务显式开启事务后，由于业务代码出现夯死没有发送commit，从而导致该insert事务一直持有锁而出现大量的用户线程等待。</description>
+    </item>
+    
+    <item>
+      <title></title>
       <link>https://ayalastrike.github.io/docs/MySQL/InnoDB/2_source/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
@@ -121,6 +134,22 @@ MySQL 8.0.0 Release Notes
       <description>设计理念：
  对于碎片化的IO会减少实际文件IO读写 写缓冲：对于写，可以合并IO操作，并在写缓冲满时自动调用write写入文件 读缓冲：对于读，多余读出来的数据可以给下次读使用 对于文件设备支持字符设备和块设备 支持多种IO模式，比如缓冲IO/direct IO/aio 对文件操作进行了抽象：4k对齐（按照块粒度读取IO效率最高），缓冲封装在文件操作内部  IO_CACHE初始化
 // 1. seek 如果文件不支持seek，则seek_offset要求为0 // 2. 设置最小对齐块min_cache（16k/8k） // 3. 缩小cachesize：READ_CACHE/SEQ_READ_APPEND下，如果读取范围足够小，则重置cachesize为该范围，并关闭aio // 4. cachesize按照min_cache对齐，如果为SEQ_READ_APPEND，则申请2块，malloc如果失败则缩小3/4重试(128k-&amp;gt;96k)，少于等于min_cache则报错返回  int init_io_cache_ext(IO_CACHE *info, File file, size_t cachesize, enum cache_type type, my_off_t seek_offset, pbool use_async_io, myf cache_myflags, PSI_file_key file_key) { size_t min_cache; my_off_t pos; my_off_t end_of_file= ~(my_off_t) 0; info-&amp;gt;file= file; info-&amp;gt;file_key= file_key; info-&amp;gt;type= TYPE_NOT_SET; // 直到创建append_buffer_lock后才设置type  info-&amp;gt;pos_in_file= seek_offset; info-&amp;gt;pre_close = info-&amp;gt;pre_read = info-&amp;gt;post_read = 0; info-&amp;gt;arg = 0; info-&amp;gt;alloced_buffer = 0; info-&amp;gt;buffer=0; info-&amp;gt;seek_not_done= 0; if (file &amp;gt;= 0) { pos= mysql_file_tell(file, MYF(0)); // 定位文件位置  if ((pos == (my_off_t) -1) &amp;amp;&amp;amp; (my_errno() == ESPIPE)) // 文件不支持seek，再试一次，如果还不行就失败，这种情况下传入的seek_offset要求为0  { info-&amp;gt;seek_not_done= 0; DBUG_ASSERT(seek_offset == 0); } else info-&amp;gt;seek_not_done= MY_TEST(seek_offset !</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/kill_idle_transaction/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/kill_idle_transaction/</guid>
+      <description>1. 背景 #  我们在线上遇到5.7.26的锁问题，需要解决idle事务长时间挂起的问题。同时也调研了现有的mysql timeout机制，以确保其和现有的timeout机制可以吻合。
+Percona从5.1.59-13.0引入了innodb_kill_idle_transaction，用于解决长事务场景，即对idle事务设定一个超时时间，对超过该时间的事务所在的用户连接进行断开。
+引入该参数也可以防止purge线程的长时间阻塞（长事务会一直保持在活跃状态，则会导致purge长时间的等待，从而导致undo无法清理从而造成磁盘空间的不断增加）。
+在实现上，开始是通过扫描InnoDB事务列表来进行判断的，在Percona Server 5.6.35-80.0则改为判断connection socket read timeout。这样优化的好处是，巡检可能会造成CPU空跑，而基于socket select超时则发生超时才会触发，使代码的运行更有效率。
+另外，percona现在提供了两个参数：innodb_kill_idle_transaction（后者的alias，5.7中已标记为deprecated）和kill_idle_transaction。我们在port时只保留kill_idle_transaction。
+2. 设计 #  复用net_wait_timeout：
+ 处于事务中（SERVER_STATUS_IN_TRANS）&amp;amp; min(kill_idle_transaction, net_wait_timeout) 其他场景还是返回net_wait_timeout  kill_idle_transaction配置项
+   配置项 默认值 值范围     kill_idle_transaction 0（不开启） 0 ~ 1 year    3. 示例 #  1. 验证idle事务的连接会自动kill掉 mysql&amp;gt; show global variables like &#39;%idle%&#39;; +-----------------------+-------+ | Variable_name | Value | +-----------------------+-------+ | kill_idle_transaction | 10 | +-----------------------+-------+ mysql&amp;gt; begin; Query OK, 0 rows affected (0.</description>
     </item>
     
     <item>
@@ -367,7 +396,7 @@ The VIO routines are wrappers for the various network I/O calls that happen with
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/menu/</guid>
-      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning（转）   NET VIO MySQL 8.0 对网络模块的优化（转） MySQL 8.0 通过Resource Group来控制线程计算资源（转） MariaDB MaxScale Proxy Protocol（转） 用户建链（转）   Timeout机制 Thread Pool MDL IO_CACHE 内存管理 信号处理机制 日志 read_only lower_case_table_names Invisible Index   InnoDB  overview source code record page storage buffer pool latch B+ tree change buffer lock redo log transaction   Replication    </description>
+      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning（转）   NET VIO MySQL 8.0 对网络模块的优化（转） MySQL 8.0 通过Resource Group来控制线程计算资源（转） MariaDB MaxScale Proxy Protocol（转） 用户建链（转）   Timeout机制  kill_idle_transaction   Thread Pool MDL IO_CACHE 内存管理 信号处理机制 日志 read_only lower_case_table_names Invisible Index   InnoDB  overview source code record page storage buffer pool latch B+ tree change buffer lock  MySQL 5.7.26锁问题   redo log transaction   Replication    </description>
     </item>
     
     <item>
@@ -417,7 +446,7 @@ spatial control 空间控制
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/9_change_buffer/</guid>
-      <description>change buffer是InnoDB所特有的，设计思想非常先进，首先详细介绍change buffer的设计机制和实现细节，然后介绍其为了避免死锁所做的考虑。
+      <description>change buffer是InnoDB所特有的。
 设计 #  change buffer目的是减少随机访问磁盘，提升non-unique secondary index（以下简称NUSI）的变更效率，在IO-bound workload下很有必要。
 在InnoDB中，数据顺序存储在clustered index的leaf node，secondary index leaf node则是离散的，因此，对seconary index leaf node的变更操作是随机IO。为了提升secondary index的磁盘IO效率，InnoDB的做法是采用写缓冲机制，将NUSI的变更操作缓冲下来（leaf page oriented），减少随机IO，并在合适的时机将多次对同一页的操作进行merge，这块缓存称为change buffer。
 当导入大量数据时，DBA常见的一个做法是，先disable keys，然后倒入数据后再enable keys，这也是减少随机IO手段的一个体现。  这里借用官方一张图，可以给大家带来直观的理解：
