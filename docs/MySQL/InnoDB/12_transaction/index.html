@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="1 事务 #  1.1 概述 #  事务是访问数据库中数据的一个程序执行单元。在一个事务中的操作，要么都做，要么不做，这是事务的目的，也是事务模型区别于文件系统的重要特征之一。
+<meta name="description" content="事务 #  概述 #  事务是访问数据库中数据的一个程序执行单元。在一个事务中的操作，要么都做，要么不做，这是事务的目的，也是事务模型区别于文件系统的重要特征之一。
 从理论上来说，事务有着极其严格的定义，必须同时满足ACID四个特性。但是数据库厂商出于各种目的，并没有严格满足事务的ACID标准。比如对于MySQL的NDB Cluster，没有满足D；对于Oracle，默认的事务隔离级别是Read Committed，不满足I。在InnoDB中，默认的事务隔离级别是Read Repeatable，完全遵循和满足事务的ACID特性。
 这里要注意，D保证的是事务系统的高可靠性（High Reliability），而不是高可用性（High Availability）。对于高可用性，事务本身并不能保证，需要一些系统共同配合来完成。
-1.2 分类 #  参见Jim Gray
-1.3 隔离级别 #  令人惊讶的是，大部分数据库系统都没有提供真正的隔离性，最初或许是因为系统实现者并没有真正理解这些问题。如今这些问题已经弄清楚了，但是数据库的实现者在正确性和性能之间做了妥协。ISO和ANSI SQL标准制定了四种事务隔离级别的标准，但是很少有数据库厂商遵循这些标准，比如Oracle不支持Read Uncommitted和Repeatable Read的事务隔离级别。
+分类 #  参见Jim Gray
+隔离级别 #  令人惊讶的是，大部分数据库系统都没有提供真正的隔离性，最初或许是因为系统实现者并没有真正理解这些问题。如今这些问题已经弄清楚了，但是数据库的实现者在正确性和性能之间做了妥协。ISO和ANSI SQL标准制定了四种事务隔离级别的标准，但是很少有数据库厂商遵循这些标准，比如Oracle不支持Read Uncommitted和Repeatable Read的事务隔离级别。
 SQL标准定义的四个隔离级别为：
  Read Uncommitted Read Committed Repeatable Read Serializable  SQL和SQL2标准的默认事务隔离级别是Serializable。
 InnoDB支持的默认事务隔离级别是Repeatable Read，但是和SQL标准不同的是，InnoDB在此隔离级别下，通过使用next-key locking算法，避免了幻读的产生，即可以完全保证事务的隔离性要求，达到了SQL标准的Serializable隔离级别。在append-only storage上，采用snapshot isolation也是避免幻读的一种实现方式。
@@ -15,16 +15,16 @@ InnoDB支持的默认事务隔离级别是Repeatable Read，但是和SQL标准�
 采用MV可以实现snapshot isolation进而避免幻读吗？
 InnoDB既然也有采用了MV，不用next-key locking而用Percolator的方式能不能做到？
  关于事务可以洋洋洒洒写很多，这里主要聚焦InnoDB中的事务子系统的实现，详细的事务概念和事务控制技术这里略过。
-2 事务子系统 #  事务子系统中的数据包括事务信息、undo log、binlog信息以及doublewrite信息。
+事务子系统 #  事务子系统中的数据包括事务信息、undo log、binlog信息以及doublewrite信息。
 这些信息由trx_sys page牵头，存储在各自的segment中：
    segment 存储内容 segment header     txn segment 事务信息 trx_sys page   rollback segment undo segment、history链表、undo slots rollback segment page   undo segment undo log undo segment page   doublewrite segment doublewrite数据 trx_sys_page    整体层次如下：">
 <meta name="theme-color" content="#FFFFFF">
 <meta name="color-scheme" content="light dark"><meta property="og:title" content="transaction" />
-<meta property="og:description" content="1 事务 #  1.1 概述 #  事务是访问数据库中数据的一个程序执行单元。在一个事务中的操作，要么都做，要么不做，这是事务的目的，也是事务模型区别于文件系统的重要特征之一。
+<meta property="og:description" content="事务 #  概述 #  事务是访问数据库中数据的一个程序执行单元。在一个事务中的操作，要么都做，要么不做，这是事务的目的，也是事务模型区别于文件系统的重要特征之一。
 从理论上来说，事务有着极其严格的定义，必须同时满足ACID四个特性。但是数据库厂商出于各种目的，并没有严格满足事务的ACID标准。比如对于MySQL的NDB Cluster，没有满足D；对于Oracle，默认的事务隔离级别是Read Committed，不满足I。在InnoDB中，默认的事务隔离级别是Read Repeatable，完全遵循和满足事务的ACID特性。
 这里要注意，D保证的是事务系统的高可靠性（High Reliability），而不是高可用性（High Availability）。对于高可用性，事务本身并不能保证，需要一些系统共同配合来完成。
-1.2 分类 #  参见Jim Gray
-1.3 隔离级别 #  令人惊讶的是，大部分数据库系统都没有提供真正的隔离性，最初或许是因为系统实现者并没有真正理解这些问题。如今这些问题已经弄清楚了，但是数据库的实现者在正确性和性能之间做了妥协。ISO和ANSI SQL标准制定了四种事务隔离级别的标准，但是很少有数据库厂商遵循这些标准，比如Oracle不支持Read Uncommitted和Repeatable Read的事务隔离级别。
+分类 #  参见Jim Gray
+隔离级别 #  令人惊讶的是，大部分数据库系统都没有提供真正的隔离性，最初或许是因为系统实现者并没有真正理解这些问题。如今这些问题已经弄清楚了，但是数据库的实现者在正确性和性能之间做了妥协。ISO和ANSI SQL标准制定了四种事务隔离级别的标准，但是很少有数据库厂商遵循这些标准，比如Oracle不支持Read Uncommitted和Repeatable Read的事务隔离级别。
 SQL标准定义的四个隔离级别为：
  Read Uncommitted Read Committed Repeatable Read Serializable  SQL和SQL2标准的默认事务隔离级别是Serializable。
 InnoDB支持的默认事务隔离级别是Repeatable Read，但是和SQL标准不同的是，InnoDB在此隔离级别下，通过使用next-key locking算法，避免了幻读的产生，即可以完全保证事务的隔离性要求，达到了SQL标准的Serializable隔离级别。在append-only storage上，采用snapshot isolation也是避免幻读的一种实现方式。
@@ -32,7 +32,7 @@ InnoDB支持的默认事务隔离级别是Repeatable Read，但是和SQL标准�
 采用MV可以实现snapshot isolation进而避免幻读吗？
 InnoDB既然也有采用了MV，不用next-key locking而用Percolator的方式能不能做到？
  关于事务可以洋洋洒洒写很多，这里主要聚焦InnoDB中的事务子系统的实现，详细的事务概念和事务控制技术这里略过。
-2 事务子系统 #  事务子系统中的数据包括事务信息、undo log、binlog信息以及doublewrite信息。
+事务子系统 #  事务子系统中的数据包括事务信息、undo log、binlog信息以及doublewrite信息。
 这些信息由trx_sys page牵头，存储在各自的segment中：
    segment 存储内容 segment header     txn segment 事务信息 trx_sys page   rollback segment undo segment、history链表、undo slots rollback segment page   undo segment undo log undo segment page   doublewrite segment doublewrite数据 trx_sys_page    整体层次如下：" />
 <meta property="og:type" content="article" />
@@ -45,7 +45,7 @@ InnoDB既然也有采用了MV，不用next-key locking而用Percolator的方式�
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.5145e623761d7b8f5c9bce92d26a14a67e94c255e1e94ee68d160fbf51f8067c.js" integrity="sha256-UUXmI3Yde49cm86S0moUpn6UwlXh6U7mjRYPv1H4Bnw=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.e307c5b6b545bc330809c86598d51eeeafb826935e6357ce983fd445018fec44.js" integrity="sha256-4wfFtrVFvDMICchlmNUe7q&#43;4JpNeY1fOmD/URQGP7EQ=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -209,31 +209,31 @@ https://github.com/alex-shpak/hugo-book
   
 <nav id="TableOfContents">
   <ul>
-    <li><a href="#1-事务">1 事务</a>
+    <li><a href="#事务">事务</a>
       <ul>
-        <li><a href="#11-概述">1.1 概述</a></li>
-        <li><a href="#12-分类">1.2 分类</a></li>
-        <li><a href="#13-隔离级别">1.3 隔离级别</a></li>
+        <li><a href="#概述">概述</a></li>
+        <li><a href="#分类">分类</a></li>
+        <li><a href="#隔离级别">隔离级别</a></li>
       </ul>
     </li>
-    <li><a href="#2-事务子系统">2 事务子系统</a>
+    <li><a href="#事务子系统">事务子系统</a>
       <ul>
-        <li><a href="#21-trx_sys-page">2.1 trx_sys page</a></li>
-        <li><a href="#22-doublewrite-segment">2.2 doublewrite segment</a></li>
+        <li><a href="#trx_sys-page">trx_sys page</a></li>
+        <li><a href="#doublewrite-segment">doublewrite segment</a></li>
       </ul>
     </li>
-    <li><a href="#3-undo-log">3 undo log</a>
+    <li><a href="#undo-log">undo log</a>
       <ul>
-        <li><a href="#31-设计">3.1 设计</a></li>
-        <li><a href="#32-物理布局">3.2 物理布局</a>
+        <li><a href="#设计">设计</a></li>
+        <li><a href="#物理布局">物理布局</a>
           <ul>
-            <li><a href="#321-rollback-segment">3.2.1 rollback segment</a></li>
-            <li><a href="#322-undo-segment">3.2.2 undo segment</a></li>
-            <li><a href="#323-undo-page">3.2.3 undo page</a></li>
-            <li><a href="#323-undo-log">3.2.3 undo log</a>
+            <li><a href="#rollback-segment">rollback segment</a></li>
+            <li><a href="#undo-segment">undo segment</a></li>
+            <li><a href="#undo-page">undo page</a></li>
+            <li><a href="#undo-log-1">undo log</a>
               <ul>
-                <li><a href="#3231-insert-undo-log-record">3.2.3.1 insert undo log record</a></li>
-                <li><a href="#3232-update-undo-log-record">3.2.3.2 update undo log record</a>
+                <li><a href="#insert-undo-log-record">insert undo log record</a></li>
+                <li><a href="#update-undo-log-record">update undo log record</a>
                   <ul>
                     <li><a href="#trx_undo_upd_exist_rec">TRX_UNDO_UPD_EXIST_REC</a></li>
                     <li><a href="#trx_undo_del_mark_rec">TRX_UNDO_DEL_MARK_REC</a></li>
@@ -242,36 +242,36 @@ https://github.com/alex-shpak/hugo-book
                 </li>
               </ul>
             </li>
-            <li><a href="#324-undo的redo">3.2.4 undo的redo</a></li>
+            <li><a href="#undo的redo">undo的redo</a></li>
           </ul>
         </li>
-        <li><a href="#33-内存布局">3.3 内存布局</a></li>
-        <li><a href="#34-undo的一生">3.4 undo的一生</a>
+        <li><a href="#内存布局">内存布局</a></li>
+        <li><a href="#undo的一生">undo的一生</a>
           <ul>
-            <li><a href="#341-分配rollback-segment">3.4.1 分配rollback segment</a>
+            <li><a href="#分配rollback-segment">分配rollback segment</a>
               <ul>
                 <li><a href="#只读事务">只读事务</a></li>
                 <li><a href="#读写事务">读写事务</a></li>
               </ul>
             </li>
-            <li><a href="#342-使用rollback-segment">3.4.2 使用rollback segment</a></li>
-            <li><a href="#343-写入undo-log-record">3.4.3 写入undo log record</a></li>
+            <li><a href="#使用rollback-segment">使用rollback segment</a></li>
+            <li><a href="#写入undo-log-record">写入undo log record</a></li>
           </ul>
         </li>
       </ul>
     </li>
-    <li><a href="#4-事务">4 事务</a>
+    <li><a href="#事务-1">事务</a>
       <ul>
-        <li><a href="#41-rollback">4.1 rollback</a>
+        <li><a href="#rollback">rollback</a>
           <ul>
-            <li><a href="#411-rollback-pointer">4.1.1 rollback pointer</a></li>
-            <li><a href="#412-回滚操作">4.1.2 回滚操作</a></li>
+            <li><a href="#rollback-pointer">rollback pointer</a></li>
+            <li><a href="#回滚操作">回滚操作</a></li>
           </ul>
         </li>
-        <li><a href="#42-commit">4.2 commit</a>
+        <li><a href="#commit">commit</a>
           <ul>
-            <li><a href="#421-内部xa事务">4.2.1 内部XA事务</a></li>
-            <li><a href="#422-binlogengine-xa">4.2.2 Binlog/Engine XA</a>
+            <li><a href="#内部xa事务">内部XA事务</a></li>
+            <li><a href="#binlogengine-xa">Binlog/Engine XA</a>
               <ul>
                 <li><a href="#事务协调机制">事务协调机制</a></li>
                 <li><a href="#2pc">2PC</a></li>
@@ -280,20 +280,20 @@ https://github.com/alex-shpak/hugo-book
             </li>
           </ul>
         </li>
-        <li><a href="#43-mvcc">4.3 MVCC</a>
+        <li><a href="#mvcc">MVCC</a>
           <ul>
-            <li><a href="#431-readview">4.3.1 readview</a></li>
-            <li><a href="#432-数据可见性">4.3.2 数据可见性</a></li>
-            <li><a href="#433-构建版本">4.3.3 构建版本</a></li>
+            <li><a href="#readview">readview</a></li>
+            <li><a href="#数据可见性">数据可见性</a></li>
+            <li><a href="#构建版本">构建版本</a></li>
           </ul>
         </li>
-        <li><a href="#44-purge">4.4 purge</a>
+        <li><a href="#purge">purge</a>
           <ul>
-            <li><a href="#441-清理操作">4.4.1 清理操作</a></li>
-            <li><a href="#442-purge实现">4.4.2 purge实现</a></li>
+            <li><a href="#清理操作">清理操作</a></li>
+            <li><a href="#purge实现">purge实现</a></li>
           </ul>
         </li>
-        <li><a href="#45-crash-recovery">4.5 crash recovery</a></li>
+        <li><a href="#crash-recovery">crash recovery</a></li>
       </ul>
     </li>
   </ul>
@@ -308,25 +308,25 @@ https://github.com/alex-shpak/hugo-book
 
       
       
-  <article class="markdown"><h1 id="1-事务">
-  1 事务
-  <a class="anchor" href="#1-%e4%ba%8b%e5%8a%a1">#</a>
+  <article class="markdown"><h1 id="事务">
+  事务
+  <a class="anchor" href="#%e4%ba%8b%e5%8a%a1">#</a>
 </h1>
-<h2 id="11-概述">
-  1.1 概述
-  <a class="anchor" href="#11-%e6%a6%82%e8%bf%b0">#</a>
+<h2 id="概述">
+  概述
+  <a class="anchor" href="#%e6%a6%82%e8%bf%b0">#</a>
 </h2>
 <p>事务是访问数据库中数据的一个程序执行单元。在一个事务中的操作，要么都做，要么不做，这是事务的目的，也是事务模型区别于文件系统的重要特征之一。</p>
 <p>从理论上来说，事务有着极其严格的定义，必须同时满足ACID四个特性。但是数据库厂商出于各种目的，并没有严格满足事务的ACID标准。比如对于MySQL的NDB Cluster，没有满足D；对于Oracle，默认的事务隔离级别是Read Committed，不满足I。在InnoDB中，默认的事务隔离级别是Read Repeatable，完全遵循和满足事务的ACID特性。</p>
 <p>这里要注意，D保证的是事务系统的高可靠性（High Reliability），而不是高可用性（High Availability）。对于高可用性，事务本身并不能保证，需要一些系统共同配合来完成。</p>
-<h2 id="12-分类">
-  1.2 分类
-  <a class="anchor" href="#12-%e5%88%86%e7%b1%bb">#</a>
+<h2 id="分类">
+  分类
+  <a class="anchor" href="#%e5%88%86%e7%b1%bb">#</a>
 </h2>
 <p>参见Jim Gray</p>
-<h2 id="13-隔离级别">
-  1.3 隔离级别
-  <a class="anchor" href="#13-%e9%9a%94%e7%a6%bb%e7%ba%a7%e5%88%ab">#</a>
+<h2 id="隔离级别">
+  隔离级别
+  <a class="anchor" href="#%e9%9a%94%e7%a6%bb%e7%ba%a7%e5%88%ab">#</a>
 </h2>
 <p>令人惊讶的是，大部分数据库系统都没有提供真正的隔离性，最初或许是因为系统实现者并没有真正理解这些问题。如今这些问题已经弄清楚了，但是数据库的实现者在正确性和性能之间做了妥协。ISO和ANSI SQL标准制定了四种事务隔离级别的标准，但是很少有数据库厂商遵循这些标准，比如Oracle不支持Read Uncommitted和Repeatable Read的事务隔离级别。</p>
 <p>SQL标准定义的四个隔离级别为：</p>
@@ -346,9 +346,9 @@ https://github.com/alex-shpak/hugo-book
 </blockquote>
 
 <p>关于事务可以洋洋洒洒写很多，这里主要聚焦InnoDB中的事务子系统的实现，详细的事务概念和事务控制技术这里略过。</p>
-<h1 id="2-事务子系统">
-  2 事务子系统
-  <a class="anchor" href="#2-%e4%ba%8b%e5%8a%a1%e5%ad%90%e7%b3%bb%e7%bb%9f">#</a>
+<h1 id="事务子系统">
+  事务子系统
+  <a class="anchor" href="#%e4%ba%8b%e5%8a%a1%e5%ad%90%e7%b3%bb%e7%bb%9f">#</a>
 </h1>
 <p>事务子系统中的数据包括事务信息、undo log、binlog信息以及doublewrite信息。</p>
 <p>这些信息由trx_sys page牵头，存储在各自的segment中：</p>
@@ -400,9 +400,9 @@ https://github.com/alex-shpak/hugo-book
   如果启用了undo表空间，其第3页会存储rollback segment array header（rollback slots），布局和现有介绍不同。
 </blockquote>
 
-<h2 id="21-trx_sys-page">
-  2.1 trx_sys page
-  <a class="anchor" href="#21-trx_sys-page">#</a>
+<h2 id="trx_sys-page">
+  trx_sys page
+  <a class="anchor" href="#trx_sys-page">#</a>
 </h2>
 <p>事务系统段在InnoDB第一次启动时创建（trx_sysf_create），trx_sys segment header保存在系統表空間的(0, 5)位置，该页称为trx_sys page，保存以下事务信息：</p>
 <ul>
@@ -418,9 +418,9 @@ https://github.com/alex-shpak/hugo-book
 <p>TRX_SYS_RSEGS保存回滚段信息（slot array），一共128个rollback slot（也称为回滚段对象），每个slot用8个字节存储space+page_no。</p>
 <p>TRX_SYS_MYSQL_LOG_INFO保存server层的binlog信息（-1000），用以保证innoDB的日志和server层日志的一致性。</p>
 <p>TRX_SYS_DOUBLEWRITE保存了doublewrite信息（-200）。</p>
-<h2 id="22-doublewrite-segment">
-  2.2 doublewrite segment
-  <a class="anchor" href="#22-doublewrite-segment">#</a>
+<h2 id="doublewrite-segment">
+  doublewrite segment
+  <a class="anchor" href="#doublewrite-segment">#</a>
 </h2>
 <p>在buffer pool一章已经介绍，InnoDB在flush page时，为了避免partial-write，而采用doublewrite的方式进行flush，其本质上使用的是shadow page+duplex replica的方式。</p>
 <p>doublewrite的segment header页保存在trx_sys page中。为了保证其在磁盘的顺序性以便顺序IO，doublewrite segment先一次性申请32个碎片页（不使用），再申请2个区，并将每个区的起始地址更新到BLOCK1、BLOCK2（buf_dblwr_create），因此总共申请了160个页（32 + 64*2），实际使用的是2个区128个页。</p>
@@ -494,13 +494,13 @@ https://github.com/alex-shpak/hugo-book
     prev_page_no = page_no;
 }
 </code></pre></div><p>从这里可以看出，一共申请了64 * 2 +32个页（2 * TRX_SYS_DOUBLEWRITE_BLOCK_SIZE + FSP_EXTENT_SIZE / 2），这正如前面所分析的，doublewrite segment需要保证写入的顺序性。</p>
-<h1 id="3-undo-log">
-  3 undo log
-  <a class="anchor" href="#3-undo-log">#</a>
+<h1 id="undo-log">
+  undo log
+  <a class="anchor" href="#undo-log">#</a>
 </h1>
-<h2 id="31-设计">
-  3.1 设计
-  <a class="anchor" href="#31-%e8%ae%be%e8%ae%a1">#</a>
+<h2 id="设计">
+  设计
+  <a class="anchor" href="#%e8%ae%be%e8%ae%a1">#</a>
 </h2>
 <p>在InnoDB中，undo log有两个用途：</p>
 <ol>
@@ -524,16 +524,16 @@ https://github.com/alex-shpak/hugo-book
 <li>undo log的物理布局：包括存储在哪个表空间中，undo page，undo log type，undo log的组织</li>
 </ul>
 <p>接下来，通过从总体到局部的顺序，依次介绍rollback segment→undo segment→undo page→undo log。</p>
-<h2 id="32-物理布局">
-  3.2 物理布局
-  <a class="anchor" href="#32-%e7%89%a9%e7%90%86%e5%b8%83%e5%b1%80">#</a>
+<h2 id="物理布局">
+  物理布局
+  <a class="anchor" href="#%e7%89%a9%e7%90%86%e5%b8%83%e5%b1%80">#</a>
 </h2>
 <p>undo log的存储由rollback segment和undo segment共同完成,，并且，这两个段的segment header都保存在各自的segment内。rollback segment中仅保存undo segment page所在页的位置，一个rollback segment一共保存1024个undo segment的信息，加上trx_sys page可以保存128个rollback segment slot，因此理论上可以支持最大128 * 1024/2个并发事务（因为同一时刻只能有一个active事务使用一个undo page，假定每个事务DML有INSERT、UPDATE、DELETE）。</p>
 <p>整体关系如下图所示：</p>
 <p><img src="/InnoDB_txn_undo_layout.png" alt="InnoDB_txn_undo_layout" /></p>
-<h3 id="321-rollback-segment">
-  3.2.1 rollback segment
-  <a class="anchor" href="#321-rollback-segment">#</a>
+<h3 id="rollback-segment">
+  rollback segment
+  <a class="anchor" href="#rollback-segment">#</a>
 </h3>
 <p>trx_sys page描述了128个rollback segment的信息（space+page_no）。这128个rollback segment保存在rollback segment header page中，其中RSEG_0 page位于(0, 6)位置。</p>
 <p>每个rollback segment header page维护了段内的history链表和1024个undo slot位置。</p>
@@ -581,9 +581,9 @@ https://github.com/alex-shpak/hugo-book
 <li>undo slot directory</li>
 </ol>
 <p>在MySQL 5.7中，REG_0在系统表空间中，REG_1 ~ REG_32在临时表空间，REG_33 ~ REG_127如果配置了undo表空间（space_id固定，从1开始）则放置其内，否则在系统表空间。</p>
-<h3 id="322-undo-segment">
-  3.2.2 undo segment
-  <a class="anchor" href="#322-undo-segment">#</a>
+<h3 id="undo-segment">
+  undo segment
+  <a class="anchor" href="#undo-segment">#</a>
 </h3>
 <p>每个rollback segment描述了1024个undo segment page，其中每个undo segment又由一系列undo page组成，存储实际的undo log，因此undo segment可以认为是一个&quot;逻辑概念&quot;，由一组undo page构成。</p>
 <p>在每个undo segment中，第一个undo page称为undo segment page，用于保存undo segment header（30字节）和相应的段元信息：</p>
@@ -618,9 +618,9 @@ https://github.com/alex-shpak/hugo-book
 </tr>
 </tbody>
 </table>
-<h3 id="323-undo-page">
-  3.2.3 undo page
-  <a class="anchor" href="#323-undo-page">#</a>
+<h3 id="undo-page">
+  undo page
+  <a class="anchor" href="#undo-page">#</a>
 </h3>
 <p>undo segment中的所有page都为undo page，都有undo page header（18字节）：</p>
 <table>
@@ -697,9 +697,9 @@ trx_undo_set_state_at_finish() {
      }
      ...
 }
-</code></pre></div><h3 id="323-undo-log">
-  3.2.3 undo log
-  <a class="anchor" href="#323-undo-log">#</a>
+</code></pre></div><h3 id="undo-log-1">
+  undo log
+  <a class="anchor" href="#undo-log-1">#</a>
 </h3>
 <p>undo log是一种逻辑日志，存储的是记录修改的before image（前镜像）。因此事务的rollback意味着是将数据逻辑的恢复到原来的样子。</p>
 <p>但是数据结构和page在回滚之后可能大不相同。因为，在数据库系统中，事务是并发访问的。同一页中的不同行并发，可能已经让page产生分裂/合并进而改变了B+ tree的结构，或者page的布局发生了变化。不能通过apply undo log将page回滚到该事务开始的样子，会影响其他事务在该页上的并发操作。</p>
@@ -779,18 +779,18 @@ trx_undo_set_state_at_finish() {
 <p>根据产生的undo log就可以将一行记录恢复到之前的版本（trx_undo_prev_version_build），这也是MVCC（或者说非锁定读）的实现过程。</p>
 <p>整个undo log的存储内容如下图所示：</p>
 <p><img src="/InnoDB_txn_undo_log_detail.png" alt="InnoDB_txn_undo_log_detail" /></p>
-<h4 id="3231-insert-undo-log-record">
-  3.2.3.1 insert undo log record
-  <a class="anchor" href="#3231-insert-undo-log-record">#</a>
+<h4 id="insert-undo-log-record">
+  insert undo log record
+  <a class="anchor" href="#insert-undo-log-record">#</a>
 </h4>
 <p>insert undo log record通常是指事务在INSERT操作中产生的undo日志。因为insert操作的记录只对事务本身可见，对其他事务不可见（没有历史版本），因此可以在事务提交后直接删除，不需要进行purge操作。</p>
 <p>undo log record的类型为TRX_UNDO_INSERT_REC，只需为rollback做准备，而不需要考虑MVCC，因此只记录行的before image（key fields: col 1&hellip;n len+data）。</p>
 <p>insert undo log的结构：</p>
 <p><img src="/InnoDB_txn_undo_log_insert_undo_log_record.png" alt="InnoDB_txn_undo_log_insert_undo_log_record" /></p>
 <p>rollback时根据key fields在index中定位record</p>
-<h4 id="3232-update-undo-log-record">
-  3.2.3.2 update undo log record
-  <a class="anchor" href="#3232-update-undo-log-record">#</a>
+<h4 id="update-undo-log-record">
+  update undo log record
+  <a class="anchor" href="#update-undo-log-record">#</a>
 </h4>
 <p>update undo log record通常保存的是对DELETE和UPDATE操作产生的undo日志。该undo日志可能需要提供MVCC机制，因此与insert undo log record不同，其不能在事务提交时立即进行删除。当事务提交时，它会放入rollback segment的history链表的头部。然后等待purge。</p>
 <p>update undo log record的结构如图所示：</p>
@@ -838,9 +838,9 @@ DELETE FROM t where a = 1;
 INSERT INTO t values (1, 'm'); 
 </code></pre><p>在上面的事务中，首先删除了主键值=1的记录，随后又再次插入了主键值=1的新纪录，这时该事务会产生2个update undo log record。第一个为TRX_UNDO_DEL_MARK_REC，第二个update undo log record需要保存update vector的信息（更新了b列）。另外，由于列b是索引列，因此还需要保存索引列的信息（index columns）。</p>
 <p>从这里可以发现，insert操作不一定都产生insert update undo log，也可能产生TRX_UNDO_UPD_DEL_REC类型的update undo log record。另外，在这个例子中，第二次插入的并非是主键值=1的记录，或者之后插入的记录的字节大小发生了变化，那么就不会产生TRX_UNDO_UPD_DEL_REC的undo日志，其产生的依旧是insert update undo log。</p>
-<h3 id="324-undo的redo">
-  3.2.4 undo的redo
-  <a class="anchor" href="#324-undo%e7%9a%84redo">#</a>
+<h3 id="undo的redo">
+  undo的redo
+  <a class="anchor" href="#undo%e7%9a%84redo">#</a>
 </h3>
 <p>在前面已经提到，undo的持久化要通过redo保证，因此undo也有对应的redo log type：</p>
 <ul>
@@ -851,9 +851,9 @@ INSERT INTO t values (1, 'm');
 <li>MLOG_UNDO_HDR_REUSE：复用undo log header</li>
 <li>MLOG_UNDO_HDR_CREATE：创建undo log header</li>
 </ul>
-<h2 id="33-内存布局">
-  3.3 内存布局
-  <a class="anchor" href="#33-%e5%86%85%e5%ad%98%e5%b8%83%e5%b1%80">#</a>
+<h2 id="内存布局">
+  内存布局
+  <a class="anchor" href="#%e5%86%85%e5%ad%98%e5%b8%83%e5%b1%80">#</a>
 </h2>
 <p>在事务子系统中，undo的管理非常重要，我们在上面介绍了物理布局，在内存中，也需要构建其对应的内存对象，来进行undo管理。</p>
 <p>在这里，我们略过undo表空间对象，聚焦在rollback segment和undo log对象上。</p>
@@ -884,9 +884,9 @@ INSERT INTO t values (1, 'm');
 };
 </code></pre><p>整体布局如下：</p>
 <p><img src="/InnoDB_txn_undo_memory_layout.png" alt="InnoDB_txn_undo_memory_layout" /></p>
-<h2 id="34-undo的一生">
-  3.4 undo的一生
-  <a class="anchor" href="#34-undo%e7%9a%84%e4%b8%80%e7%94%9f">#</a>
+<h2 id="undo的一生">
+  undo的一生
+  <a class="anchor" href="#undo%e7%9a%84%e4%b8%80%e7%94%9f">#</a>
 </h2>
 <p>我们从整个undo的生命周期来完整系统的介绍：</p>
 <ol>
@@ -895,9 +895,9 @@ INSERT INTO t values (1, 'm');
 <li>写入undo log</li>
 <li>事务提交，事务回滚，MVCC，purge，crash recovery在事务一节介绍</li>
 </ol>
-<h3 id="341-分配rollback-segment">
-  3.4.1 分配rollback segment
-  <a class="anchor" href="#341-%e5%88%86%e9%85%8drollback-segment">#</a>
+<h3 id="分配rollback-segment">
+  分配rollback segment
+  <a class="anchor" href="#%e5%88%86%e9%85%8drollback-segment">#</a>
 </h3>
 <p>当事务&quot;产生&quot;对数据进行修改时，会相应产生undo log。也就是说，rollback segment在事务第一次&quot;需要&quot;存储undo log时才分配。</p>
 <p>我们知道，事务按读写分为只读事务和读写事务，我们分别介绍这两种事务如何分配rollback segment。</p>
@@ -925,9 +925,9 @@ INSERT INTO t values (1, 'm');
 trx_set_rw_mode   设置为读写事务
   trx_assign_rseg_low(srv_rollback_segments, srv_undo_tablespaces, TRX_RSEG_TYPE_REDO)
     rseg = get_next_redo_rseg(max_undo_logs, n_tablespaces);
-</code></pre><h3 id="342-使用rollback-segment">
-  3.4.2 使用rollback segment
-  <a class="anchor" href="#342-%e4%bd%bf%e7%94%a8rollback-segment">#</a>
+</code></pre><h3 id="使用rollback-segment">
+  使用rollback segment
+  <a class="anchor" href="#%e4%bd%bf%e7%94%a8rollback-segment">#</a>
 </h3>
 <p>流程如下（trx_undo_report_row_operation）：</p>
 <ol>
@@ -956,9 +956,9 @@ trx_set_rw_mode   设置为读写事务
   这里留给读者一个问题：在#1中对于update_undo，为什么要在undo segment page中创建undo log header
 </blockquote>
 
-<h3 id="343-写入undo-log-record">
-  3.4.3 写入undo log record
-  <a class="anchor" href="#343-%e5%86%99%e5%85%a5undo-log-record">#</a>
+<h3 id="写入undo-log-record">
+  写入undo log record
+  <a class="anchor" href="#%e5%86%99%e5%85%a5undo-log-record">#</a>
 </h3>
 <p>写入undo log record流程如下（trx_undo_report_row_operation）：</p>
 <ol>
@@ -967,27 +967,27 @@ trx_set_rw_mode   设置为读写事务
 <li>如果写入过程中空间不足，则将已写部分涂黑0xFF（trx_undo_erase_page_end），然后申请新的undo page重新写入</li>
 <li>构建rollback pointer，并更新到clustered index record中</li>
 </ol>
-<h1 id="4-事务">
-  4 事务
-  <a class="anchor" href="#4-%e4%ba%8b%e5%8a%a1">#</a>
+<h1 id="事务-1">
+  事务
+  <a class="anchor" href="#%e4%ba%8b%e5%8a%a1-1">#</a>
 </h1>
 <p>大多数数据库采用STEAL+NO-FORCE的方式，在事务推进国产中，不断写入undo log，然后在事务提交时，保证redo log持久化到磁盘。这样，当发生被动故障时，就可以通过crash recovery将数据恢复到一致的状态。</p>
-<h2 id="41-rollback">
-  4.1 rollback
-  <a class="anchor" href="#41-rollback">#</a>
+<h2 id="rollback">
+  rollback
+  <a class="anchor" href="#rollback">#</a>
 </h2>
-<h3 id="411-rollback-pointer">
-  4.1.1 rollback pointer
-  <a class="anchor" href="#411-rollback-pointer">#</a>
+<h3 id="rollback-pointer">
+  rollback pointer
+  <a class="anchor" href="#rollback-pointer">#</a>
 </h3>
 <p>在record一章我们介绍过，行记录通过roll_ptr将行的历史变化串联起来，实现MV。</p>
 <p>在MVCC中，通过当前行不断apply undo log record，来构造出之前的版本。</p>
 <p>rollback pointer指针占用7个字节：undo segment no需要1个字节，且最高位保存undo log type；undo page需要4个字节；undo log需要2个字节。因此可以通过rseg_id+page_no+offset构造出rollback pointer（trx_undo_build_roll_ptr），也可反解（trx_undo_decode_roll_ptr）。</p>
 <p><img src="/InnoDB_txn_rollback_pointer.png" alt="InnoDB_txn_rollback_pointer" /></p>
 <p><img src="/InnoDB_txn_rollback_chain.png" alt="InnoDB_txn_rollback_chain" /></p>
-<h3 id="412-回滚操作">
-  4.1.2 回滚操作
-  <a class="anchor" href="#412-%e5%9b%9e%e6%bb%9a%e6%93%8d%e4%bd%9c">#</a>
+<h3 id="回滚操作">
+  回滚操作
+  <a class="anchor" href="#%e5%9b%9e%e6%bb%9a%e6%93%8d%e4%bd%9c">#</a>
 </h3>
 <p>根据回滚操作的发起者来分类，可以分为用户态的回滚和内核态的回滚。</p>
 <p>用户态的回滚指的是用户通过rollback命令发起。</p>
@@ -1031,18 +1031,18 @@ trx_set_rw_mode   设置为读写事务
 </ul>
 <p>当回滚处理完最后一个undo log record后，释放之前undo log record所占用的空间（trx_undo_truncate_end），但是并不回收undo log header。</p>
 <p>回滚同样需要提交，因为与正常提交一样，需要释放事务所持有的资源：undo segment、lock、read view，并flush redo log buffer。</p>
-<h2 id="42-commit">
-  4.2 commit
-  <a class="anchor" href="#42-commit">#</a>
+<h2 id="commit">
+  commit
+  <a class="anchor" href="#commit">#</a>
 </h2>
 <p>事务的提交核心注意两个点位：commit point和complete point。</p>
 <p>事务提交分为两种：隐式提交和显式提交。</p>
 <p>当执行DDL，或者采用事务控制语句（BEGIN，START TRANSACTION时），为隐式提交。</p>
 <p>显式提交，发送COMMIT。</p>
 <p>另外，MySQL支持XA事务，这里我们只谈内部XA事务。</p>
-<h3 id="421-内部xa事务">
-  4.2.1 内部XA事务
-  <a class="anchor" href="#421-%e5%86%85%e9%83%a8xa%e4%ba%8b%e5%8a%a1">#</a>
+<h3 id="内部xa事务">
+  内部XA事务
+  <a class="anchor" href="#%e5%86%85%e9%83%a8xa%e4%ba%8b%e5%8a%a1">#</a>
 </h3>
 <p>MySQL因为架构分为server层和engine层，为了保证两层日志的一致性，需要使用2PC原子协议，而这通过内部XA事务保证。</p>
 <p>采用2PC，就要有协调者（Coordinator），而协调者可以有三种：</p>
@@ -1140,9 +1140,9 @@ private:
         if (ha_info-&gt;is_trx_read_write())
           ++rw_ha_count;
     trn_ctx-&gt;set_rw_ha_count(trx_scope, rw_ha_count);
-</code></pre><h3 id="422-binlogengine-xa">
-  4.2.2 Binlog/Engine XA
-  <a class="anchor" href="#422-binlogengine-xa">#</a>
+</code></pre><h3 id="binlogengine-xa">
+  Binlog/Engine XA
+  <a class="anchor" href="#binlogengine-xa">#</a>
 </h3>
 <p>在这里我们聚焦在支持2PC且协调者为mysql_bin_log。</p>
 <p>在这种场景下，TM为mysql_bin_log，RM为binlog engine和InnoDB engine。结合MySQL的架构可以看出，TM在server层，RM在engine层。</p>
@@ -1286,9 +1286,9 @@ handler::ha_create
 </blockquote>
 
 <p>这里稍微提一句，MGR中的Paxos在写binlog前（commit point之前）各个用户线程单独进行Group Replication，成功才写binlog，否则直接回滚事务。</p>
-<h2 id="43-mvcc">
-  4.3 MVCC
-  <a class="anchor" href="#43-mvcc">#</a>
+<h2 id="mvcc">
+  MVCC
+  <a class="anchor" href="#mvcc">#</a>
 </h2>
 <p>从前面的undo chain图上可以很直观的看到，undo记录包含了行数据的历史版本，因此，MVCC可以：</p>
 <ul>
@@ -1309,9 +1309,9 @@ handler::ha_create
 
 <p>读写异常是因为本事务的R和其他事务的R+W有交集，MVCC也是本着这个本质来解决问题的，解决问题的核心是定序。</p>
 <p>只读事务的trx_id始终为0（不分配），读写事务分配trx_id，另外，readview都分配，</p>
-<h3 id="431-readview">
-  4.3.1 readview
-  <a class="anchor" href="#431-readview">#</a>
+<h3 id="readview">
+  readview
+  <a class="anchor" href="#readview">#</a>
 </h3>
 <p>readview的生命周期：</p>
 <ol>
@@ -1337,9 +1337,9 @@ handler::ha_create
 <li>trx id &lt; read_view::m_up_limit_id</li>
 <li>read_view::m_up_limit_id &lt; trx id &lt; read_view::m_low_limit_id，并且 trx id 不属于 trx_t::read_view::m_ids</li>
 </ol>
-<h3 id="432-数据可见性">
-  4.3.2 数据可见性
-  <a class="anchor" href="#432-%e6%95%b0%e6%8d%ae%e5%8f%af%e8%a7%81%e6%80%a7">#</a>
+<h3 id="数据可见性">
+  数据可见性
+  <a class="anchor" href="#%e6%95%b0%e6%8d%ae%e5%8f%af%e8%a7%81%e6%80%a7">#</a>
 </h3>
 <p>事务为T，trx_id为记录R中的DATA_TRX_ID：</p>
 <ul>
@@ -1354,9 +1354,9 @@ handler::ha_create
   这里留给读者2个问题：prepared的事务可见吗？如何理解commit point、complete point和MVCC之间的关系？
 </blockquote>
 
-<h3 id="433-构建版本">
-  4.3.3 构建版本
-  <a class="anchor" href="#433-%e6%9e%84%e5%bb%ba%e7%89%88%e6%9c%ac">#</a>
+<h3 id="构建版本">
+  构建版本
+  <a class="anchor" href="#%e6%9e%84%e5%bb%ba%e7%89%88%e6%9c%ac">#</a>
 </h3>
 <p>因为在clustered index的行上存储了trx_id和roll_ptr，因此可以通过trx_id判断可见性，如果不可见，则通过roll_ptr继续向前构建，直至可见或者达到尾部。（row_vers_build_for_consistent_read）。</p>
 <p>这也是线性系统的一种体现。</p>
@@ -1367,15 +1367,15 @@ handler::ha_create
 
 </blockquote>
 
-<h2 id="44-purge">
-  4.4 purge
-  <a class="anchor" href="#44-purge">#</a>
+<h2 id="purge">
+  purge
+  <a class="anchor" href="#purge">#</a>
 </h2>
 <p>purge操作负责清理已提交的不再被使用的数据，包括记录和日志。</p>
 <p>清理这些数据依托于undo log，更进一步，依托于构建在提交序上的点位（trx_no），再结合SQL graph，展开实际的清理。</p>
-<h3 id="441-清理操作">
-  4.4.1 清理操作
-  <a class="anchor" href="#441-%e6%b8%85%e7%90%86%e6%93%8d%e4%bd%9c">#</a>
+<h3 id="清理操作">
+  清理操作
+  <a class="anchor" href="#%e6%b8%85%e7%90%86%e6%93%8d%e4%bd%9c">#</a>
 </h3>
 <p>purge清理属于事后打扫，这一方面保证forward fast，另一方面为了MVCC的GC，因此，清理工作包括：</p>
 <ul>
@@ -1400,9 +1400,9 @@ handler::ha_create
 <li>事务的提交序和执行序不一样，因此在purge undo和purge记录时有依赖关系，需要构建graph</li>
 </ul>
 <p>并且，在进行purge操作时，会产生大量的随机读，这可能会产生性能问题。另外，如果出现了长事务正在使用mvcc（比如最新的active事务），则会导致history链表最头部的已提交事务的undo log的回收无法进行。</p>
-<h3 id="442-purge实现">
-  4.4.2 purge实现
-  <a class="anchor" href="#442-purge%e5%ae%9e%e7%8e%b0">#</a>
+<h3 id="purge实现">
+  purge实现
+  <a class="anchor" href="#purge%e5%ae%9e%e7%8e%b0">#</a>
 </h3>
 <p>purge_sys全局对象（trx_purge_t）保存当前purge的位置和信息。</p>
 <p>purge流程如下：</p>
@@ -1448,9 +1448,9 @@ handler::ha_create
 </ol>
 <p>purge_is_running用于保护DROP TABLE的操作，当进行purge undo日志时，需要持有该对象的x-latch；当需要进行DROP TABLE时，需要持有该对象的s-latch，以此保证当进行purge操作时，表不会被删除。</p>
 <p>latch用于保证删除undo日志的正确性，保证删除时没有其他事务正在引用该undo日志。当开启purge操作时，首先需要持有该x-latch，然后通过read_view_oldest_copy_or_open_new判断哪些undo日志可以被清理（注意：purge是一个特殊的事务，事务类型为TRX_PURGE，其他都是用户事务）。当用户事务需要通过undo日志进行多版本并发控制（一致性非锁定读）时，需要首先获得该对象的s-latch。</p>
-<h2 id="45-crash-recovery">
-  4.5 crash recovery
-  <a class="anchor" href="#45-crash-recovery">#</a>
+<h2 id="crash-recovery">
+  crash recovery
+  <a class="anchor" href="#crash-recovery">#</a>
 </h2>
 <p>crash recovery的恢复分为两个阶段：</p>
 <ol>
@@ -1574,31 +1574,31 @@ recv_scan_log_recs									解析128个log block Scans log from a buffer and sto
   
 <nav id="TableOfContents">
   <ul>
-    <li><a href="#1-事务">1 事务</a>
+    <li><a href="#事务">事务</a>
       <ul>
-        <li><a href="#11-概述">1.1 概述</a></li>
-        <li><a href="#12-分类">1.2 分类</a></li>
-        <li><a href="#13-隔离级别">1.3 隔离级别</a></li>
+        <li><a href="#概述">概述</a></li>
+        <li><a href="#分类">分类</a></li>
+        <li><a href="#隔离级别">隔离级别</a></li>
       </ul>
     </li>
-    <li><a href="#2-事务子系统">2 事务子系统</a>
+    <li><a href="#事务子系统">事务子系统</a>
       <ul>
-        <li><a href="#21-trx_sys-page">2.1 trx_sys page</a></li>
-        <li><a href="#22-doublewrite-segment">2.2 doublewrite segment</a></li>
+        <li><a href="#trx_sys-page">trx_sys page</a></li>
+        <li><a href="#doublewrite-segment">doublewrite segment</a></li>
       </ul>
     </li>
-    <li><a href="#3-undo-log">3 undo log</a>
+    <li><a href="#undo-log">undo log</a>
       <ul>
-        <li><a href="#31-设计">3.1 设计</a></li>
-        <li><a href="#32-物理布局">3.2 物理布局</a>
+        <li><a href="#设计">设计</a></li>
+        <li><a href="#物理布局">物理布局</a>
           <ul>
-            <li><a href="#321-rollback-segment">3.2.1 rollback segment</a></li>
-            <li><a href="#322-undo-segment">3.2.2 undo segment</a></li>
-            <li><a href="#323-undo-page">3.2.3 undo page</a></li>
-            <li><a href="#323-undo-log">3.2.3 undo log</a>
+            <li><a href="#rollback-segment">rollback segment</a></li>
+            <li><a href="#undo-segment">undo segment</a></li>
+            <li><a href="#undo-page">undo page</a></li>
+            <li><a href="#undo-log-1">undo log</a>
               <ul>
-                <li><a href="#3231-insert-undo-log-record">3.2.3.1 insert undo log record</a></li>
-                <li><a href="#3232-update-undo-log-record">3.2.3.2 update undo log record</a>
+                <li><a href="#insert-undo-log-record">insert undo log record</a></li>
+                <li><a href="#update-undo-log-record">update undo log record</a>
                   <ul>
                     <li><a href="#trx_undo_upd_exist_rec">TRX_UNDO_UPD_EXIST_REC</a></li>
                     <li><a href="#trx_undo_del_mark_rec">TRX_UNDO_DEL_MARK_REC</a></li>
@@ -1607,36 +1607,36 @@ recv_scan_log_recs									解析128个log block Scans log from a buffer and sto
                 </li>
               </ul>
             </li>
-            <li><a href="#324-undo的redo">3.2.4 undo的redo</a></li>
+            <li><a href="#undo的redo">undo的redo</a></li>
           </ul>
         </li>
-        <li><a href="#33-内存布局">3.3 内存布局</a></li>
-        <li><a href="#34-undo的一生">3.4 undo的一生</a>
+        <li><a href="#内存布局">内存布局</a></li>
+        <li><a href="#undo的一生">undo的一生</a>
           <ul>
-            <li><a href="#341-分配rollback-segment">3.4.1 分配rollback segment</a>
+            <li><a href="#分配rollback-segment">分配rollback segment</a>
               <ul>
                 <li><a href="#只读事务">只读事务</a></li>
                 <li><a href="#读写事务">读写事务</a></li>
               </ul>
             </li>
-            <li><a href="#342-使用rollback-segment">3.4.2 使用rollback segment</a></li>
-            <li><a href="#343-写入undo-log-record">3.4.3 写入undo log record</a></li>
+            <li><a href="#使用rollback-segment">使用rollback segment</a></li>
+            <li><a href="#写入undo-log-record">写入undo log record</a></li>
           </ul>
         </li>
       </ul>
     </li>
-    <li><a href="#4-事务">4 事务</a>
+    <li><a href="#事务-1">事务</a>
       <ul>
-        <li><a href="#41-rollback">4.1 rollback</a>
+        <li><a href="#rollback">rollback</a>
           <ul>
-            <li><a href="#411-rollback-pointer">4.1.1 rollback pointer</a></li>
-            <li><a href="#412-回滚操作">4.1.2 回滚操作</a></li>
+            <li><a href="#rollback-pointer">rollback pointer</a></li>
+            <li><a href="#回滚操作">回滚操作</a></li>
           </ul>
         </li>
-        <li><a href="#42-commit">4.2 commit</a>
+        <li><a href="#commit">commit</a>
           <ul>
-            <li><a href="#421-内部xa事务">4.2.1 内部XA事务</a></li>
-            <li><a href="#422-binlogengine-xa">4.2.2 Binlog/Engine XA</a>
+            <li><a href="#内部xa事务">内部XA事务</a></li>
+            <li><a href="#binlogengine-xa">Binlog/Engine XA</a>
               <ul>
                 <li><a href="#事务协调机制">事务协调机制</a></li>
                 <li><a href="#2pc">2PC</a></li>
@@ -1645,20 +1645,20 @@ recv_scan_log_recs									解析128个log block Scans log from a buffer and sto
             </li>
           </ul>
         </li>
-        <li><a href="#43-mvcc">4.3 MVCC</a>
+        <li><a href="#mvcc">MVCC</a>
           <ul>
-            <li><a href="#431-readview">4.3.1 readview</a></li>
-            <li><a href="#432-数据可见性">4.3.2 数据可见性</a></li>
-            <li><a href="#433-构建版本">4.3.3 构建版本</a></li>
+            <li><a href="#readview">readview</a></li>
+            <li><a href="#数据可见性">数据可见性</a></li>
+            <li><a href="#构建版本">构建版本</a></li>
           </ul>
         </li>
-        <li><a href="#44-purge">4.4 purge</a>
+        <li><a href="#purge">purge</a>
           <ul>
-            <li><a href="#441-清理操作">4.4.1 清理操作</a></li>
-            <li><a href="#442-purge实现">4.4.2 purge实现</a></li>
+            <li><a href="#清理操作">清理操作</a></li>
+            <li><a href="#purge实现">purge实现</a></li>
           </ul>
         </li>
-        <li><a href="#45-crash-recovery">4.5 crash recovery</a></li>
+        <li><a href="#crash-recovery">crash recovery</a></li>
       </ul>
     </li>
   </ul>

@@ -228,11 +228,11 @@ fil_system_t、fil_space_t、fil_node_t的关系如图所示：
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/docs/MySQL/InnoDB/12_transaction/</guid>
-      <description>1 事务 #  1.1 概述 #  事务是访问数据库中数据的一个程序执行单元。在一个事务中的操作，要么都做，要么不做，这是事务的目的，也是事务模型区别于文件系统的重要特征之一。
+      <description>事务 #  概述 #  事务是访问数据库中数据的一个程序执行单元。在一个事务中的操作，要么都做，要么不做，这是事务的目的，也是事务模型区别于文件系统的重要特征之一。
 从理论上来说，事务有着极其严格的定义，必须同时满足ACID四个特性。但是数据库厂商出于各种目的，并没有严格满足事务的ACID标准。比如对于MySQL的NDB Cluster，没有满足D；对于Oracle，默认的事务隔离级别是Read Committed，不满足I。在InnoDB中，默认的事务隔离级别是Read Repeatable，完全遵循和满足事务的ACID特性。
 这里要注意，D保证的是事务系统的高可靠性（High Reliability），而不是高可用性（High Availability）。对于高可用性，事务本身并不能保证，需要一些系统共同配合来完成。
-1.2 分类 #  参见Jim Gray
-1.3 隔离级别 #  令人惊讶的是，大部分数据库系统都没有提供真正的隔离性，最初或许是因为系统实现者并没有真正理解这些问题。如今这些问题已经弄清楚了，但是数据库的实现者在正确性和性能之间做了妥协。ISO和ANSI SQL标准制定了四种事务隔离级别的标准，但是很少有数据库厂商遵循这些标准，比如Oracle不支持Read Uncommitted和Repeatable Read的事务隔离级别。
+分类 #  参见Jim Gray
+隔离级别 #  令人惊讶的是，大部分数据库系统都没有提供真正的隔离性，最初或许是因为系统实现者并没有真正理解这些问题。如今这些问题已经弄清楚了，但是数据库的实现者在正确性和性能之间做了妥协。ISO和ANSI SQL标准制定了四种事务隔离级别的标准，但是很少有数据库厂商遵循这些标准，比如Oracle不支持Read Uncommitted和Repeatable Read的事务隔离级别。
 SQL标准定义的四个隔离级别为：
  Read Uncommitted Read Committed Repeatable Read Serializable  SQL和SQL2标准的默认事务隔离级别是Serializable。
 InnoDB支持的默认事务隔离级别是Repeatable Read，但是和SQL标准不同的是，InnoDB在此隔离级别下，通过使用next-key locking算法，避免了幻读的产生，即可以完全保证事务的隔离性要求，达到了SQL标准的Serializable隔离级别。在append-only storage上，采用snapshot isolation也是避免幻读的一种实现方式。
@@ -240,7 +240,7 @@ InnoDB支持的默认事务隔离级别是Repeatable Read，但是和SQL标准�
 采用MV可以实现snapshot isolation进而避免幻读吗？
 InnoDB既然也有采用了MV，不用next-key locking而用Percolator的方式能不能做到？
  关于事务可以洋洋洒洒写很多，这里主要聚焦InnoDB中的事务子系统的实现，详细的事务概念和事务控制技术这里略过。
-2 事务子系统 #  事务子系统中的数据包括事务信息、undo log、binlog信息以及doublewrite信息。
+事务子系统 #  事务子系统中的数据包括事务信息、undo log、binlog信息以及doublewrite信息。
 这些信息由trx_sys page牵头，存储在各自的segment中：
    segment 存储内容 segment header     txn segment 事务信息 trx_sys page   rollback segment undo segment、history链表、undo slots rollback segment page   undo segment undo log undo segment page   doublewrite segment doublewrite数据 trx_sys_page    整体层次如下：</description>
     </item>
