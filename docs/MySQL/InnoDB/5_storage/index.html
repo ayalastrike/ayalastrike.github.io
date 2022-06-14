@@ -44,14 +44,14 @@ fil_system_t、fil_space_t、fil_node_t的关系如图所示：
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/InnoDB/5_storage/" /><meta property="article:section" content="docs" />
 
-<meta property="article:modified_time" content="2022-06-09T15:02:44&#43;08:00" />
+<meta property="article:modified_time" content="2022-06-14T22:10:06&#43;08:00" />
 
 <title>storage | Rick&#39;s Blog</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.e307c5b6b545bc330809c86598d51eeeafb826935e6357ce983fd445018fec44.js" integrity="sha256-4wfFtrVFvDMICchlmNUe7q&#43;4JpNeY1fOmD/URQGP7EQ=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.2789345e5497015b379d01733aeca4e6537d1b9e6d7a4a7e4e40c964b9036342.js" integrity="sha256-J4k0XlSXAVs3nQFzOuyk5lN9G55tekp&#43;TkDJZLkDY0I=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -1341,7 +1341,7 @@ int fallocate(int fd, int mode, off_t offset, off_t len);
 <tr>
 <td style="text-align:left">FIL_PAGE_FILE_FLUSH_LSN</td>
 <td style="text-align:left">8</td>
-<td style="text-align:left">仅在系统表空间的第1个页（0,0）中使用，用来判断数据库是否正常关闭</td>
+<td style="text-align:left">仅在系统表空间的第1个页（0,0）中使用，用来判断数据库是否正常关闭，透明压缩页也会用作存储压缩信息</td>
 <td style="text-align:left"></td>
 </tr>
 <tr>
@@ -1467,7 +1467,7 @@ int fallocate(int fd, int mode, off_t offset, off_t len);
 <tr>
 <td style="text-align:left">FSP_SEG_INODES_FULL</td>
 <td style="text-align:left">16</td>
-<td style="text-align:left">已经完全用满的segment inode页链表（也称为段inode全满页链表）</td>
+<td style="text-align:left">已经完全用满的segment inode页链表（也称为段inode全满页链表）（LEN 4 + FIRST 6 + LAST 6）</td>
 </tr>
 <tr>
 <td style="text-align:left">FSP_SEG_INODES_FREE</td>
@@ -1502,7 +1502,7 @@ int fallocate(int fd, int mode, off_t offset, off_t len);
 <tr>
 <td style="text-align:left">XDES_FLST_NODE</td>
 <td style="text-align:left">12</td>
-<td style="text-align:left">区所在的链表节点：FSP_FREE、FSP_FREE_FRAG / FSP_FULL_FRAG、或者位于某个B+树的segment inode entry链表中</td>
+<td style="text-align:left">区所在的链表节点：FSP_FREE、FSP_FREE_FRAG / FSP_FULL_FRAG、或者位于某个B+ tree的segment inode entry链表中</td>
 </tr>
 <tr>
 <td style="text-align:left">XDES_STATE</td>
@@ -1695,6 +1695,12 @@ int fallocate(int fd, int mode, off_t offset, off_t len);
 </tbody>
 </table>
 <p>当创建一个索引的时候，实际上就是在构建一个新的B+树（btr_create），先为non leaf segment分配一个segment inode entry（从FSP_SEG_INODES_FREE找到一个空闲的segment inode页，从中分配segment inode entry），然后创建root page（根节点页，其位于segment inode entry的第一个碎片页），并将该segment inode entry的位置信息更新到root page上；之后在分配leaf segment的segment inode entry，过程同上。</p>
+<p>表空间page分配的策略大致为：</p>
+<ol>
+<li>新的segment，先使用碎片页，然后再从空闲区链表中申请segemnt</li>
+<li>尽量物理连续（hint page）</li>
+<li>尽量使用segment的未使用页（先从半满段取，再从空闲段取）</li>
+</ol>
 <h2 id="表空间-1">
   表空间
   <a class="anchor" href="#%e8%a1%a8%e7%a9%ba%e9%97%b4-1">#</a>

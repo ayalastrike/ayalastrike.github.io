@@ -38,14 +38,14 @@ InnoDB既然也有采用了MV，不用next-key locking而用Percolator的方式�
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/InnoDB/12_transaction/" /><meta property="article:section" content="docs" />
 
-<meta property="article:modified_time" content="2022-06-10T17:49:30&#43;08:00" />
+<meta property="article:modified_time" content="2022-06-14T22:10:06&#43;08:00" />
 
 <title>transaction | Rick&#39;s Blog</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.e307c5b6b545bc330809c86598d51eeeafb826935e6357ce983fd445018fec44.js" integrity="sha256-4wfFtrVFvDMICchlmNUe7q&#43;4JpNeY1fOmD/URQGP7EQ=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.2789345e5497015b379d01733aeca4e6537d1b9e6d7a4a7e4e40c964b9036342.js" integrity="sha256-J4k0XlSXAVs3nQFzOuyk5lN9G55tekp&#43;TkDJZLkDY0I=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -1399,7 +1399,7 @@ handler::ha_create
 <ul>
 <li>事务的提交序和执行序不一样，因此在purge undo和purge记录时有依赖关系，需要构建graph</li>
 </ul>
-<p>并且，在进行purge操作时，会产生大量的随机读，这可能会产生性能问题。另外，如果出现了长事务正在使用mvcc（比如最新的active事务），则会导致history链表最头部的已提交事务的undo log的回收无法进行。</p>
+<p>并且，在进行purge操作时，如果undo page在buffer pool还好，如果已经flush到磁盘，则会产生大量的随机读，这可能会产生性能问题。另外，如果出现了长事务正在使用mvcc（比如最新的active事务），则会导致history链表最头部的已提交事务的undo log的回收无法进行。</p>
 <h3 id="purge实现">
   purge实现
   <a class="anchor" href="#purge%e5%ae%9e%e7%8e%b0">#</a>
@@ -1455,14 +1455,14 @@ handler::ha_create
 <p>crash recovery的恢复分为两个阶段：</p>
 <ol>
 <li>
-<p>forward，恢复到内存态，即将redo log从checkpoint到最新，进行apply，将磁盘上的数据恢复到crash时的内存态，其中也包括undo log。</p>
+<p>forward，恢复到内存态，即将redo log从checkpoint到最新，进行apply，将磁盘上的数据恢复到crash时的内存态，其中也包括undo log。这样就获得ongoing事务列表。</p>
 </li>
 <li>
 <p>backward：因为buffer pool的STEAL+NO-FORCE，需要将active STEAL的数据rollback掉，即找出active+prepared事务，将其rollback，也称为failure atomic。</p>
 <p>具体来讲，遍历所有rollback segment，读取其undo segment中的undo segment page中TRX_UNDO_STATE，可以得知其事务状态（还记得前面说过的吗，一个undo segment只会最多有一个active transaction），如果为活跃事务，则需要遍历该事务的undo来rollback，以及构建出事务子系统的内存布局：trx_sys，trx_t，trx_rseg_t和trx_undo_t</p>
+<p>读取最后一个binlog文件，判断文件头是否有LOG_EVENT_BINLOG_IN_USE_F，有则意味着MySQL异常关闭，则依次读取binlog中的event，提取XID用于XA事务恢复</p>
 </li>
 </ol>
-<p>这里还需要考虑XA事务。</p>
 <p>总结一下，数据库系统整体的恢复节奏如下：</p>
 <ol>
 <li>redo recovery</li>

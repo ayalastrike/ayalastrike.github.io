@@ -20,14 +20,14 @@ spatial control 空间控制
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/InnoDB/6_buffer_pool/" /><meta property="article:section" content="docs" />
 
-<meta property="article:modified_time" content="2022-06-13T19:09:25&#43;08:00" />
+<meta property="article:modified_time" content="2022-06-14T22:10:06&#43;08:00" />
 
 <title>buffer pool | Rick&#39;s Blog</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.e307c5b6b545bc330809c86598d51eeeafb826935e6357ce983fd445018fec44.js" integrity="sha256-4wfFtrVFvDMICchlmNUe7q&#43;4JpNeY1fOmD/URQGP7EQ=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.2789345e5497015b379d01733aeca4e6537d1b9e6d7a4a7e4e40c964b9036342.js" integrity="sha256-J4k0XlSXAVs3nQFzOuyk5lN9G55tekp&#43;TkDJZLkDY0I=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -265,6 +265,16 @@ https://github.com/alex-shpak/hugo-book
           </ul>
         </li>
         <li><a href="#部分写">部分写</a></li>
+      </ul>
+    </li>
+    <li><a href="#压缩页的管理">压缩页的管理</a>
+      <ul>
+        <li><a href="#compressed-page">compressed page</a>
+          <ul>
+            <li><a href="#transparent-page-compression">transparent page compression</a></li>
+            <li><a href="#row-compression">row compression</a></li>
+          </ul>
+        </li>
       </ul>
     </li>
     <li><a href="#mysql-80改进">MySQL 8.0改进</a></li>
@@ -1527,6 +1537,145 @@ finish_mutex:
 <p><img src="/InnoDB_buffer_pool_doublewrite.png" alt="InnoDB_buffer_pool_doublewrite" /></p>
 <p>通过double write解决了部分写的问题，但是也同时引入了两次fsync的开销，现在更多的存储（文件系统）已经支持16K乃至更大的原子写粒度，这样，就可以完全关闭double write，提升写入性能。另外，每次flush最多64个页。</p>
 <p>doublewrite segment的管理在事务一章讲述。</p>
+<h1 id="压缩页的管理">
+  压缩页的管理
+  <a class="anchor" href="#%e5%8e%8b%e7%bc%a9%e9%a1%b5%e7%9a%84%e7%ae%a1%e7%90%86">#</a>
+</h1>
+<h2 id="compressed-page">
+  compressed page
+  <a class="anchor" href="#compressed-page">#</a>
+</h2>
+<p>InnoDB支持两种compressed page：</p>
+<ul>
+<li>transparent page compression</li>
+<li>row compression</li>
+</ul>
+<h3 id="transparent-page-compression">
+  transparent page compression
+  <a class="anchor" href="#transparent-page-compression">#</a>
+</h3>
+<p>MySQL 5.7新增的（page type = FIL_PAGE_COMPRESSED），利用内核Punch hole特性，对于一个index page，对page body进行压缩，压缩后剩余的地方&quot;打洞&quot;，即在磁盘上不占用实际空间（只在元信息中记录），比传统的lz4 compression具有更好的压缩比，实现也更简单。在buffer pool中是一个正常的page，只有在读写磁盘时，才进行压缩、解压，这也是其“透明”的意思。</p>
+<p>FIL_PAGE_FILE_FLUSH_LSN开始的8个字节记录压缩信息：</p>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>大小</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FIL_PAGE_VERSION</td>
+<td>1</td>
+<td>version</td>
+</tr>
+<tr>
+<td>FIL_PAGE_ALGORITHM_V1</td>
+<td>1</td>
+<td>压缩算法</td>
+</tr>
+<tr>
+<td>FIL_PAGE_ORIGINAL_TYPE_V1</td>
+<td>2</td>
+<td>压缩前的page type，解压后要还原回去</td>
+</tr>
+<tr>
+<td>FIL_PAGE_ORIGINAL_SIZE_V1</td>
+<td>2</td>
+<td>压缩前page body的大小</td>
+</tr>
+<tr>
+<td>FIL_PAGE_COMPRESS_SIZE_V1</td>
+<td>2</td>
+<td>压缩后的大小</td>
+</tr>
+</tbody>
+</table>
+<p>punch hone后的page要和磁盘的block对齐（整数倍）。</p>
+<p>如下图所示：</p>
+<p><img src="/InnoDB_buffer_pool_transparent_page_compression.png" alt="InnoDB_buffer_pool_transparent_page_compression" /></p>
+<p>通过create table或者alter table来开启：</p>
+<pre><code>CREATE TABLE test (
+    a int,
+    b varchar(2000)
+) compression='zlib';
+</code></pre><p>目前压缩算法支持zlib和lz4。</p>
+<p>压缩过程：</p>
+<ol>
+<li>在buffer pool中压缩数据，对齐磁盘block</li>
+<li>将压缩页写入文件</li>
+<li>调用os_file_io_complete，执行punch hole（os_file_punch_hole）</li>
+</ol>
+<p>解压过程：</p>
+<p>读取过程和压缩反序。</p>
+<p>另外，Facebook的大神Domas写了一篇<a href="http://dom.as/2015/04/09/how-innodb-lost-its-advantage/">博客</a>，认为InnoDB推出这样的压缩特性，使其正在丧失自身的优势，非常值得一读。简单的摘要下：</p>
+<ul>
+<li>无法完美压缩：例如9KB的数据可能需要12kb来存储，取决于block size；</li>
+<li>无法压缩Buffer pool, 这是和传统innodb压缩相比，以前的压缩方式可以在内存中只存放压缩页拷贝 （然而也有可能同时存在压缩和解压页），因此用户可能需要去购买iops更高的设备，而oracle正好也卖这些….</li>
+<li>punch hole 可能产生的文件碎片化，底层的文件管理更加复杂；</li>
+<li>对innodb文件做punch hole可能带来的后果是，使得每个文件的page变成一个独立的segment，文件系统需要单独的journal和metadata来管理。另外也有可能有性能问题：可能比non-sparse的写操作昂贵五倍 （这依赖于具体的内核）；</li>
+<li>删除一个拥有几百万个段管理对象的数据文件带来的开销会非常昂贵。</li>
+</ul>
+<h3 id="row-compression">
+  row compression
+  <a class="anchor" href="#row-compression">#</a>
+</h3>
+<p>create table或者alter table时指定row_format=compressed key_block_size=1|2|4|8，ibd文件以对应的block size进行划分。</p>
+<p>在buffer pool中存在两份数据：压缩页（ZIP_PAGE）和解压页（FILE_PAGE）。修改后的解压页转变为ZIP_DIRTY，并将DML操作以特殊格式记入压缩页中的mlog（Modification  Log）：</p>
+<ul>
+<li>insert：写入完整记录</li>
+<li>update：
+<ul>
+<li>delete-insert update：旧记录的dense slot标记删除，写入完整记录</li>
+<li>in-place update：写入新更新的记录</li>
+</ul>
+</li>
+<li>delete：dense slot标记删除</li>
+</ul>
+<p>compressed page格式如下：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FIL_PAGE_HEADER</td>
+<td>不处理</td>
+</tr>
+<tr>
+<td>Index Filed Information</td>
+<td>索引的列信息，在crash recovery时可恢复出索引信息</td>
+</tr>
+<tr>
+<td>Compressed Data</td>
+<td>压缩数据，按照heap no进行压缩，不压缩系统列和extern列指针</td>
+</tr>
+<tr>
+<td>Free Space</td>
+<td>空闲空间</td>
+</tr>
+<tr>
+<td>External_Ptr（optional）</td>
+<td>extern列指针数组，只存在聚集索引叶子节点，每个数组元素占20个字节(BTR_EXTERN_FIELD_REF_SIZE)</td>
+</tr>
+<tr>
+<td>系统列（trxid, roll_ptr）</td>
+<td>只存在于聚集索引叶子节点，数组元素和其heap no一一对应</td>
+</tr>
+<tr>
+<td>node ptr</td>
+<td>只存在于索引非叶子节点，存储节点指针数组</td>
+</tr>
+<tr>
+<td>Dense Page Directory</td>
+<td>分两部分，第一部分是有效记录，记录其在解压页中的偏移位置，n_owned和delete标记信息，按照键值顺序；第二部分是空闲记录；每个slot占两个字节。</td>
+</tr>
+</tbody>
+</table>
 <h1 id="mysql-80改进">
   MySQL 8.0改进
   <a class="anchor" href="#mysql-80%e6%94%b9%e8%bf%9b">#</a>
@@ -1661,6 +1810,16 @@ finish_mutex:
           </ul>
         </li>
         <li><a href="#部分写">部分写</a></li>
+      </ul>
+    </li>
+    <li><a href="#压缩页的管理">压缩页的管理</a>
+      <ul>
+        <li><a href="#compressed-page">compressed page</a>
+          <ul>
+            <li><a href="#transparent-page-compression">transparent page compression</a></li>
+            <li><a href="#row-compression">row compression</a></li>
+          </ul>
+        </li>
       </ul>
     </li>
     <li><a href="#mysql-80改进">MySQL 8.0改进</a></li>
