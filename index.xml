@@ -396,7 +396,7 @@ The VIO routines are wrappers for the various network I/O calls that happen with
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>https://ayalastrike.github.io/menu/</guid>
-      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning（转）   NET VIO MySQL 8.0 对网络模块的优化（转） MySQL 8.0 通过Resource Group来控制线程计算资源（转） MariaDB MaxScale Proxy Protocol（转） 用户建链（转）   Timeout机制  kill_idle_transaction   Thread Pool MDL IO_CACHE 内存管理 信号处理机制 日志 read_only lower_case_table_names Invisible Index   InnoDB  overview source code record page storage buffer pool latch B+ tree change buffer lock  MySQL 5.7.26锁问题   redo log transaction   Replication    </description>
+      <description> MySQL  Server  MySQL启动过程 MySQL的连接和请求处理  THD Protocol  Returning（转）   NET VIO MySQL 8.0 对网络模块的优化（转） MySQL 8.0 通过Resource Group来控制线程计算资源（转） MariaDB MaxScale Proxy Protocol（转） 用户建链（转）   Timeout机制  kill_idle_transaction   Thread Pool MDL IO_CACHE 内存管理 信号处理机制 日志 read_only lower_case_table_names Invisible Index lazy drop/truncate table   InnoDB  overview source code record page storage buffer pool latch B+ tree change buffer lock  MySQL 5.7.26锁问题   redo log transaction   Replication    </description>
     </item>
     
     <item>
@@ -473,6 +473,19 @@ latch ordering #  在数据库中，从狭义视角看，latch用于保护修改
 enum latch_level_t { ... SYNC_BUF_BLOCK, SYNC_BUF_PAGE_HASH, ... } latch counter #  LatchCounter负责进行latch计数，计数信息包括：spin、waits、calls，并可以动态开启/关闭计数功能（MutexMonitor），也可以通过传入的callback函数用计数值进行运算（比如在innodb中统计latch信息）。
 数据结构说明
    变量/函数 说明     变量/函数 说明   Count spin waits calls enabled 是否开启计数   vector&amp;lt;Count*&amp;gt; m_counters m_counters   bool m_active 是否开启计数   enable/disable/reset 开启/关闭/重置计数   single_register/single_deregister 注册/注销单例计数器   sum_register/sum_deregister 注册/注销聚合计数器   iterate 迭代计数器，调用callback函数    latch元信息 #  latch元信息由以上3类数据聚合而成（ID、ordering、counter），数据结构为latch_meta_t。</description>
+    </item>
+    
+    <item>
+      <title>lazy drop/truncate table</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/lazy_drop_table/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/lazy_drop_table/</guid>
+      <description>背景 #  DBA在线上进行运维时，会遇到drop table，truncate table出现卡顿（维持数秒），在这期间，如果业务访问量大，请求会在短时间内急剧堆积，对线上的稳定性造成很大的挑战。
+现有DBA需要drop/truncate table的运维场景有：
+ 业务需要调整schema，发起DDL操作（drop） 业务清理过期表（按照日期定期滚动）（drop） 业务废弃（drop） 业务重用表（drop + create） 业务清理数据（truncate）  其中DDL过程如下：
+DBA在线上进行DDL的时候，采用gh-ost的旁路方式进行schema变更，最终会drop table。
+ create ghost table like origin table alter ghost table copy origin table data and apply its binlog to ghost table &amp;hellip; lock origin table with write lock, until all binlog applied rename origin table rename ghost to origin drop origin table  root cause #  drop table、truncate table的目的都是为了清理数据，除了清理磁盘上的数据外，内存中的高速缓存（buffer pool）也需要清理，以免用户访问到了失效的缓存而得到错误的结果。</description>
     </item>
     
     <item>

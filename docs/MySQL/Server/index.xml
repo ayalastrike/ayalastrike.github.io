@@ -341,5 +341,18 @@ The VIO routines are wrappers for the various network I/O calls that happen with
  TCP/IP Unix domain socket Named Pipes（Windows only） Shared Memory（Windows only） Secure Sockets（SSL）  Unix domain socket</description>
     </item>
     
+    <item>
+      <title>lazy drop/truncate table</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Server/lazy_drop_table/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Server/lazy_drop_table/</guid>
+      <description>背景 #  DBA在线上进行运维时，会遇到drop table，truncate table出现卡顿（维持数秒），在这期间，如果业务访问量大，请求会在短时间内急剧堆积，对线上的稳定性造成很大的挑战。
+现有DBA需要drop/truncate table的运维场景有：
+ 业务需要调整schema，发起DDL操作（drop） 业务清理过期表（按照日期定期滚动）（drop） 业务废弃（drop） 业务重用表（drop + create） 业务清理数据（truncate）  其中DDL过程如下：
+DBA在线上进行DDL的时候，采用gh-ost的旁路方式进行schema变更，最终会drop table。
+ create ghost table like origin table alter ghost table copy origin table data and apply its binlog to ghost table &amp;hellip; lock origin table with write lock, until all binlog applied rename origin table rename ghost to origin drop origin table  root cause #  drop table、truncate table的目的都是为了清理数据，除了清理磁盘上的数据外，内存中的高速缓存（buffer pool）也需要清理，以免用户访问到了失效的缓存而得到错误的结果。</description>
+    </item>
+    
   </channel>
 </rss>

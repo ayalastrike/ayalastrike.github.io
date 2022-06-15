@@ -37,7 +37,7 @@ change buffer也是一颗B&#43; tree，这颗B&#43; tree的page也会使用buffe
 <link rel="icon" href="/favicon.png" type="image/x-icon">
 <link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
   <script defer src="/flexsearch.min.js"></script>
-  <script defer src="/en.search.min.2789345e5497015b379d01733aeca4e6537d1b9e6d7a4a7e4e40c964b9036342.js" integrity="sha256-J4k0XlSXAVs3nQFzOuyk5lN9G55tekp&#43;TkDJZLkDY0I=" crossorigin="anonymous"></script>
+  <script defer src="/en.search.min.8ab5cd1028bf0daf436d6fc082defe54c023ceac20699f373803bdb4571a69e4.js" integrity="sha256-irXNECi/Da9DbW/Agt7&#43;VMAjzqwgaZ83OAO9tFcaaeQ=" crossorigin="anonymous"></script>
 <!--
 Made with Book Theme
 https://github.com/alex-shpak/hugo-book
@@ -111,6 +111,7 @@ https://github.com/alex-shpak/hugo-book
 <li><a href="/docs/MySQL/Server/read_only/">read_only</a></li>
 <li><a href="/docs/MySQL/Server/lower_case_table_names/">lower_case_table_names</a></li>
 <li><a href="/docs/MySQL/Server/invisible_index/">Invisible Index</a></li>
+<li><a href="/docs/MySQL/Server/lazy_drop_table/">lazy drop/truncate table</a></li>
 </ul>
 </li>
 <li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
@@ -280,8 +281,8 @@ https://github.com/alex-shpak/hugo-book
 <ol>
 <li>change buffer tree全局只有一颗，类型为DICT_CLUSTERED | DICT_IBUF，index_id = 0xFFFFFFFF00000000ULL</li>
 <li>change buffer tree的index root page是固定的，位于系统表空间的（0, 4）位置</li>
-<li>空闲页通过链表管理，链表在index root page（PAGE_BTR_IBUF_FREE_LIST），复用了原来的leaf segment header（PAGE_BTR_SEG_LEAF），空闲页的页类型为FIL_PAGE_IBUF_FREE_LIST，空闲页通过链表节点串联前后位置（PAGE_BTR_IBUF_FREE_LIST_NODE），也复用了原来的leaf segment header</li>
-<li>因为#3复用了leaf segment header，所以用一个特殊的change buffer header page（0, 3）用于change buffer tree page的管理，其segment entry位于IBUF_TREE_SEG_HEADER（PAGE_BTR_SEG_LEAF PAGE_DATA + 0：38 + 0）</li>
+<li>空闲页通过链表管理，链表在index root page（PAGE_BTR_IBUF_FREE_LIST），复用了原来的leaf segment header（PAGE_BTR_SEG_LEAF），空闲页链表中的空闲页的页类型为FIL_PAGE_IBUF_FREE_LIST，空闲页通过链表节点串联前后位置（PAGE_BTR_IBUF_FREE_LIST_NODE），也复用了原来的leaf segment header</li>
+<li>因为#3复用了leaf segment header，所以用一个特殊的change buffer header page（0, 3）用于change buffer tree page的管理，即段管理，其segment entry位于IBUF_TREE_SEG_HEADER</li>
 </ol>
 <h2 id="change-buffer-record">
   change buffer record
@@ -337,7 +338,7 @@ https://github.com/alex-shpak/hugo-book
 <tr>
 <td style="text-align:left">IBUF_BITMAP_IBUF</td>
 <td style="text-align:left">1</td>
-<td style="text-align:left">该页是否为change buffer page，<!-- raw HTML omitted -->主要用于异步IO（ibuf_thread）的读操作（ibuf_page_low）<!-- raw HTML omitted --></td>
+<td style="text-align:left">该页是否为change buffer page，主要用于异步change buffer thread IO（ibuf_thread）的读操作（ibuf_page_low）</td>
 </tr>
 </tbody>
 </table>

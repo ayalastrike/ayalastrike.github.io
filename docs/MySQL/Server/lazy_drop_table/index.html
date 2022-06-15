@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="背景 #  DBA在线上进行运维时，会遇到drop table，truncate table出现卡顿（维持数秒），在这期间，如果业务访问量大，请求会在短时间内急剧堆积，对线上的稳定性造成很大的挑战。
+现有DBA需要drop/truncate table的运维场景有：
+ 业务需要调整schema，发起DDL操作（drop） 业务清理过期表（按照日期定期滚动）（drop） 业务废弃（drop） 业务重用表（drop &#43; create） 业务清理数据（truncate）  其中DDL过程如下：
+DBA在线上进行DDL的时候，采用gh-ost的旁路方式进行schema变更，最终会drop table。
+ create ghost table like origin table alter ghost table copy origin table data and apply its binlog to ghost table &hellip; lock origin table with write lock, until all binlog applied rename origin table rename ghost to origin drop origin table  root cause #  drop table、truncate table的目的都是为了清理数据，除了清理磁盘上的数据外，内存中的高速缓存（buffer pool）也需要清理，以免用户访问到了失效的缓存而得到错误的结果。">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="lazy drop/truncate table" />
+<meta property="og:description" content="背景 #  DBA在线上进行运维时，会遇到drop table，truncate table出现卡顿（维持数秒），在这期间，如果业务访问量大，请求会在短时间内急剧堆积，对线上的稳定性造成很大的挑战。
+现有DBA需要drop/truncate table的运维场景有：
+ 业务需要调整schema，发起DDL操作（drop） 业务清理过期表（按照日期定期滚动）（drop） 业务废弃（drop） 业务重用表（drop &#43; create） 业务清理数据（truncate）  其中DDL过程如下：
+DBA在线上进行DDL的时候，采用gh-ost的旁路方式进行schema变更，最终会drop table。
+ create ghost table like origin table alter ghost table copy origin table data and apply its binlog to ghost table &hellip; lock origin table with write lock, until all binlog applied rename origin table rename ghost to origin drop origin table  root cause #  drop table、truncate table的目的都是为了清理数据，除了清理磁盘上的数据外，内存中的高速缓存（buffer pool）也需要清理，以免用户访问到了失效的缓存而得到错误的结果。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://ayalastrike.github.io/docs/MySQL/Server/lazy_drop_table/" /><meta property="article:section" content="docs" />
+
+
+
+<title>lazy drop/truncate table | Rick&#39;s Blog</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.ddfbf06e45c8c8b48d4582b40310678f3f8b64f78e5c0eaf2377a3966fc8d369.css" integrity="sha256-3fvwbkXIyLSNRYK0AxBnjz&#43;LZPeOXA6vI3ejlm/I02k=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.8ab5cd1028bf0daf436d6fc082defe54c023ceac20699f373803bdb4571a69e4.js" integrity="sha256-irXNECi/Da9DbW/Agt7&#43;VMAjzqwgaZ83OAO9tFcaaeQ=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><img src="/wukong.jpg" alt="Logo" /><span>Rick&#39;s Blog</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  <ul>
+<li><a href="/docs/MySQL/"><strong>MySQL</strong></a>
+<ul>
+<li><a href="/docs/MySQL/Server/">Server</a>
+<ul>
+<li><a href="/docs/MySQL/Server/startup/">MySQL启动过程</a></li>
+<li><a href="/docs/MySQL/Server/connection_handler/">MySQL的连接和请求处理</a>
+<ul>
+<li><a href="/docs/MySQL/Server/thd/">THD</a></li>
+<li><a href="/docs/MySQL/Server/protocol/">Protocol</a>
+<ul>
+<li><a href="/docs/MySQL/Server/returning/">Returning（转）</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/net/">NET</a></li>
+<li><a href="/docs/MySQL/Server/vio/">VIO</a></li>
+<li><a href="/docs/MySQL/Server/8.0_net_optimize/">MySQL 8.0 对网络模块的优化（转）</a></li>
+<li><a href="/docs/MySQL/Server/8.0_resource_group/">MySQL 8.0 通过Resource Group来控制线程计算资源（转）</a></li>
+<li><a href="/docs/MySQL/Server/mariadb_maxscale_proxy_protocol/">MariaDB MaxScale Proxy Protocol（转）</a></li>
+<li><a href="/docs/MySQL/Server/user_connection_handler/">用户建链（转）</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/timeout/">Timeout机制</a>
+<ul>
+<li><a href="/docs/MySQL/Server/kill_idle_transaction/">kill_idle_transaction</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Server/ThreadPool/">Thread Pool</a></li>
+<li><a href="/docs/MySQL/Server/mdl/">MDL</a></li>
+<li><a href="/docs/MySQL/Server/io_cache/">IO_CACHE</a></li>
+<li><a href="/docs/MySQL/Server/memory/">内存管理</a></li>
+<li><a href="/docs/MySQL/Server/signal_handler/">信号处理机制</a></li>
+<li><a href="/docs/MySQL/Server/log/">日志</a></li>
+<li><a href="/docs/MySQL/Server/read_only/">read_only</a></li>
+<li><a href="/docs/MySQL/Server/lower_case_table_names/">lower_case_table_names</a></li>
+<li><a href="/docs/MySQL/Server/invisible_index/">Invisible Index</a></li>
+<li><a href="/docs/MySQL/Server/lazy_drop_table/"class=active>lazy drop/truncate table</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/">InnoDB</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/1_overview/">overview</a></li>
+<li><a href="/docs/MySQL/InnoDB/2_source/">source code</a></li>
+<li><a href="/docs/MySQL/InnoDB/3_record/">record</a></li>
+<li><a href="/docs/MySQL/InnoDB/4_page/">page</a></li>
+<li><a href="/docs/MySQL/InnoDB/5_storage/">storage</a></li>
+<li><a href="/docs/MySQL/InnoDB/6_buffer_pool/">buffer pool</a></li>
+<li><a href="/docs/MySQL/InnoDB/7_latch/">latch</a></li>
+<li><a href="/docs/MySQL/InnoDB/8_b+_tree/">B+ tree</a></li>
+<li><a href="/docs/MySQL/InnoDB/9_change_buffer/">change buffer</a></li>
+<li><a href="/docs/MySQL/InnoDB/10_lock/">lock</a>
+<ul>
+<li><a href="/docs/MySQL/InnoDB/10.1_mysql5.7.26_lock_issue/">MySQL 5.7.26锁问题</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/InnoDB/11_redo_log/">redo log</a></li>
+<li><a href="/docs/MySQL/InnoDB/12_transaction/">transaction</a></li>
+</ul>
+</li>
+<li><a href="/docs/MySQL/Replication/">Replication</a></li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="/posts/" >
+        Blog
+      </a>
+  </li>
+  
+  <li>
+    <a href="/about" target="_blank" rel="noopener">
+        About
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>lazy drop/truncate table</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#背景">背景</a></li>
+    <li><a href="#root-cause">root cause</a></li>
+    <li><a href="#方案设计">方案设计</a>
+      <ul>
+        <li><a href="#其他方案比较">其他方案比较</a>
+          <ul>
+            <li><a href="#方案1">方案1</a></li>
+            <li><a href="#方案2">方案2</a></li>
+            <li><a href="#方案3">方案3</a></li>
+          </ul>
+        </li>
+        <li><a href="#引入版本号">引入版本号</a></li>
+        <li><a href="#正向的droptruncate-table调整">正向的drop/truncate table调整</a></li>
+        <li><a href="#表空间对象fil_space的维护">表空间对象fil_space的维护</a></li>
+        <li><a href="#lazy-invalid的边界">lazy invalid的边界</a>
+          <ul>
+            <li><a href="#drop-table">drop table</a></li>
+            <li><a href="#truncate-table">truncate table</a></li>
+          </ul>
+        </li>
+        <li><a href="#正确性">正确性</a></li>
+        <li><a href="#性能">性能</a></li>
+        <li><a href="#限制条件">限制条件</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><h1 id="背景">
+  背景
+  <a class="anchor" href="#%e8%83%8c%e6%99%af">#</a>
+</h1>
+<p>DBA在线上进行运维时，会遇到drop table，truncate table出现卡顿（维持数秒），在这期间，如果业务访问量大，请求会在短时间内急剧堆积，对线上的稳定性造成很大的挑战。</p>
+<p>现有DBA需要drop/truncate table的运维场景有：</p>
+<ol>
+<li>业务需要调整schema，发起DDL操作（drop）</li>
+<li>业务清理过期表（按照日期定期滚动）（drop）</li>
+<li>业务废弃（drop）</li>
+<li>业务重用表（drop + create）</li>
+<li>业务清理数据（truncate）</li>
+</ol>
+<p>其中DDL过程如下：</p>
+<p>DBA在线上进行DDL的时候，采用gh-ost的旁路方式进行schema变更，最终会drop table。</p>
+<ol>
+<li>create ghost table like origin table</li>
+<li>alter ghost table</li>
+<li>copy origin table data and apply its binlog to ghost table &hellip;</li>
+<li>lock origin table with write lock, until all binlog applied</li>
+<li>rename origin table</li>
+<li>rename ghost to origin</li>
+<li>drop origin table</li>
+</ol>
+<h1 id="root-cause">
+  root cause
+  <a class="anchor" href="#root-cause">#</a>
+</h1>
+<p>drop table、truncate table的目的都是为了清理数据，除了清理磁盘上的数据外，内存中的高速缓存（buffer pool）也需要清理，以免用户访问到了失效的缓存而得到错误的结果。</p>
+<p>在MySQL的InnoDB存储引擎中，缓冲池以page为单位组织数据，每个页用space_id,page_no来标记，这些页存放在buffer pool的两个地方：AHI和LRU list（+flush list）。缓存的清理也是在这里进行的。</p>
+<p>在清理AHI和LRU list的时候，都需要锁住buffer pool，防止其他线程访问到过期的数据，这也是发生stall的原因。当buffer pool越大，遍历的开销就会越大，用户感受到的stall也会越明显。</p>
+<h1 id="方案设计">
+  方案设计
+  <a class="anchor" href="#%e6%96%b9%e6%a1%88%e8%ae%be%e8%ae%a1">#</a>
+</h1>
+<p>既然我们stall的root cause是清理cache，那么，我们把清理cache延后来做（lazy invalid）就可以避免stall，在正常流程中只清理数据，如下图所示：</p>
+<p><img src="/MySQL_lazy_truncate_drop_table_0.png" alt="MySQL_lazy_truncate_drop_table_0" /></p>
+<h2 id="其他方案比较">
+  其他方案比较
+  <a class="anchor" href="#%e5%85%b6%e4%bb%96%e6%96%b9%e6%a1%88%e6%af%94%e8%be%83">#</a>
+</h2>
+<h3 id="方案1">
+  方案1
+  <a class="anchor" href="#%e6%96%b9%e6%a1%881">#</a>
+</h3>
+<p>drop table不需要复用space_id，但是truncate table会复用space_id，这也是清理buffer pool的不同之处：</p>
+<ul>
+<li>truncate table：清理LRU + flush list</li>
+<li>drop table：清理flush list</li>
+</ul>
+<p>从这里可以看出，drop table的清理代价较低，阿里的patch也是通过这样做的，即将truncate转换为drop+create，但是在MySQL 5.7上还需要实现原子DDL，这个需要对事务模型做扩充，改动量很大。</p>
+<h3 id="方案2">
+  方案2
+  <a class="anchor" href="#%e6%96%b9%e6%a1%882">#</a>
+</h3>
+<p>DBA将truncate拆解为drop + create，中间有时间窗口会报表不存在，这和truncate语义是相违背的。</p>
+<h3 id="方案3">
+  方案3
+  <a class="anchor" href="#%e6%96%b9%e6%a1%883">#</a>
+</h3>
+<p>另一个方案是将page按照space_id维度来组织，这样，在进行清理时，只需要依次fix page即可，但是这样维护该链表会影响正常的dml（读写交叉影响）。</p>
+<p>补充材料</p>
+<p>MySQL 5.5.23和Percona 5.1之前也做过lazy drop table的优化，优化方向是减少latch的持有时长，<a href="http://mysql.taobao.org/monthly/2016/01/07/">链接在此</a>。</p>
+<h2 id="引入版本号">
+  引入版本号
+  <a class="anchor" href="#%e5%bc%95%e5%85%a5%e7%89%88%e6%9c%ac%e5%8f%b7">#</a>
+</h2>
+<p>那我们要解决的问题变为，如何感知到cache失效。这里我们引入版本号来解决：</p>
+<ul>
+<li>在内存中保留已删除表对应的表空间对象fil_space_t，并在其中加入m_version</li>
+<li>在内存中的page上也增加版本号，即buf_page_t上增加m_version，并增加一个指针指向fil_space_t</li>
+<li>在访问page时比较当前页和表空间上的版本，如果不一致，则page invalid</li>
+</ul>
+<p>page的内存结构如下图所示：</p>
+<p><img src="/MySQL_lazy_truncate_drop_table_3.png" alt="MySQL_lazy_truncate_drop_table_3" /></p>
+<p>version的生命周期为：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left"></th>
+<th style="text-align:left">fil_space.m_version</th>
+<th style="text-align:left">page.m_version</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">初始值</td>
+<td style="text-align:left">0（从磁盘上构建出内存的表空间对象）</td>
+<td style="text-align:left">0（从磁盘上构建出内存的page）</td>
+</tr>
+<tr>
+<td style="text-align:left">drop/truncate table</td>
+<td style="text-align:left">1</td>
+<td style="text-align:left">0</td>
+</tr>
+</tbody>
+</table>
+<p>从上面可以看到，只有fil_space.m_version会发生变化，更新的时机为：</p>
+<ul>
+<li>truncate/drop table时进行m_version++</li>
+</ul>
+<p>这样，随着page的访问，会逐渐进行page lazy invalid，并放入缓冲池的空闲页列表（free list）。</p>
+<h2 id="正向的droptruncate-table调整">
+  正向的drop/truncate table调整
+  <a class="anchor" href="#%e6%ad%a3%e5%90%91%e7%9a%84droptruncate-table%e8%b0%83%e6%95%b4">#</a>
+</h2>
+<p>维持原来的流程，调整两点：</p>
+<ul>
+<li>保留fil_space表空间对象，并将其放入fil_system→deleted_spaces（回收站）中，在正向路径中（fil_system中）摘除（drop table需要此步，truncate table无需此步）</li>
+<li>不清理buffer_pool中的page（增加BUF_REMOVE_FLUSH_NO_OP，即no-op）</li>
+</ul>
+<h2 id="表空间对象fil_space的维护">
+  表空间对象fil_space的维护
+  <a class="anchor" href="#%e8%a1%a8%e7%a9%ba%e9%97%b4%e5%af%b9%e8%b1%a1fil_space%e7%9a%84%e7%bb%b4%e6%8a%a4">#</a>
+</h2>
+<p>同样，我们不会一直保留fil_space表空间对象（针对drop table，truncate table选择保留），我们需要增加一个引用计数来确定安全释放表空间对象的边界，即当表对应的page数为零时（m_n_ref_count = 0）时，就可以安全的释放这个内存对象了。</p>
+<p>并且，新建一个fil_system-&gt;deleted_spaces,</p>
+<p>如下图所示：</p>
+<p><img src="/MySQL_lazy_truncate_drop_table_1.png" alt="MySQL_lazy_truncate_drop_table_1" /></p>
+<p>page的访问场景有：</p>
+<ul>
+<li>用户读写数据/索引：invalid</li>
+<li>后台的page cleaner线程刷脏：skip</li>
+<li>buffer pool脏页达到阈值（70%）时，强制刷脏：skip</li>
+<li>buffer pool满，LRU进行淘汰：invalid</li>
+<li>buffer pool dumper：skip</li>
+</ul>
+<p>综上所述，整个处理模型如下图所示：</p>
+<p><img src="/MySQL_lazy_truncate_drop_table_2.png" alt="MySQL_lazy_truncate_drop_table_2" /></p>
+<h2 id="lazy-invalid的边界">
+  lazy invalid的边界
+  <a class="anchor" href="#lazy-invalid%e7%9a%84%e8%be%b9%e7%95%8c">#</a>
+</h2>
+<p>那么drop table和truncate table何时完成lazy invalid呢？</p>
+<h3 id="drop-table">
+  drop table
+  <a class="anchor" href="#drop-table">#</a>
+</h3>
+<p>space_id会一直往上增长，所以不会复用；同时，已经删除的表不再有访问路径（被放置在deleted_spaces中），那么buf page只能等到buffer pool满；或者为脏页被page cleaner或脏页达到阈值强制刷脏</p>
+<h3 id="truncate-table">
+  truncate table
+  <a class="anchor" href="#truncate-table">#</a>
+</h3>
+<p>space_id会复用（不变），所以会有用户的访问路径（RW）可以触发page invalid，释放速度会快于drop table。</p>
+<h2 id="正确性">
+  正确性
+  <a class="anchor" href="#%e6%ad%a3%e7%a1%ae%e6%80%a7">#</a>
+</h2>
+<p>还有以下几点，需要解释：</p>
+<ul>
+<li>在正向的drop table/truncate table流程中，已经对持久化的信息进行了清理，只保留cached page和cached file_space，其中cached page会通过版本识别invalid，cached file_space会从file_system子系统中摘除，放入deleted_spaces，无访问路径和其关联，且和fil_system的LRU解绑</li>
+<li>正常/非正常关机下，因为只有内存中的数据结构，所以关机正常消逝，不影响正确性</li>
+<li>正向路径的更改除未销毁cache page和cached file_space外，其余对数据的变更均产生WAL（没有修改），这保证了recovery的正确性</li>
+<li>重新创建/复用fil_space的对象：drop table space_id不会重用，truncate table space_id会重用，但是因为是不同的内存表空间对象，不存在交集，所以不影响表空间对象的正确性</li>
+<li>对于同步，ddl走的是SBR，在从库上执行的流程和主库相同，可以保证操作和数据的同构</li>
+<li>临时表的生命周期和会话绑定，因此不涉及临时表的操作</li>
+<li>没有对数据存储进行改动，所以兼容性没有问题</li>
+<li>引入新的参数（ddl_lazy_cache_invalid）来控制是否开启优化，关闭保持原生行为</li>
+</ul>
+<p>需要考虑到drop table后，再create table时，space_id的使用场景，所以这里附上space_id的分配策略：</p>
+<p>在分配space_id时，只在内存中将相应值++，然后将相应的变更（space_id + offset + id）写入mtr log。</p>
+<blockquote class="book-hint info">
+  <p>在记录space_id时，需要保证内存和外存的crash一致性。</p>
+<p>因为某些情况下（比如临时表），不能将space_id的分配记入log，这样file-per-table下，就出现了三个场景：</p>
+<p>初始space_id = x</p>
+<ol>
+<li>
+<p>日志开启，内存space_id = x+1，日志记录了x+1，recovery后space_id = x+1</p>
+</li>
+<li>
+<p>不开启日志， 内存space_id = x+1，日志不记录，recovery后space_id = x</p>
+</li>
+<li>
+<p>分配了两次，第一次临时表，space_id=x+1，日志不记录，第二次用户表：space_id = x + 2，recovery后space_id=x+2</p>
+</li>
+</ol>
+<p>因此，space_id会出现回撤，洞和正常三种状态。并且，如果临时表过多，会导致达到max_space_id。</p>
+
+</blockquote>
+
+<h2 id="性能">
+  性能
+  <a class="anchor" href="#%e6%80%a7%e8%83%bd">#</a>
+</h2>
+<p>性能评估</p>
+<ul>
+<li>因为要对内存对象加字段（version），要保证不破坏cacheline</li>
+<li>page访问增加一条CPU指令（fil_space→m_version == page→m_version）代价</li>
+<li>后台线程对前台用户路径无正交</li>
+</ul>
+<h2 id="限制条件">
+  限制条件
+  <a class="anchor" href="#%e9%99%90%e5%88%b6%e6%9d%a1%e4%bb%b6">#</a>
+</h2>
+<p>表必须为独立表空间，即每个用户表有独立的space_id</p>
+<p>表不能有附属对象（外键关联、trigger、view等）</p>
+<p>不支持同时drop多个表，不支持跨存储引擎的表</p>
+<p>限制条件下的drop table/truncate table走的还是MySQL的原生流程，只是不走优化流程。</p>
+</article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#背景">背景</a></li>
+    <li><a href="#root-cause">root cause</a></li>
+    <li><a href="#方案设计">方案设计</a>
+      <ul>
+        <li><a href="#其他方案比较">其他方案比较</a>
+          <ul>
+            <li><a href="#方案1">方案1</a></li>
+            <li><a href="#方案2">方案2</a></li>
+            <li><a href="#方案3">方案3</a></li>
+          </ul>
+        </li>
+        <li><a href="#引入版本号">引入版本号</a></li>
+        <li><a href="#正向的droptruncate-table调整">正向的drop/truncate table调整</a></li>
+        <li><a href="#表空间对象fil_space的维护">表空间对象fil_space的维护</a></li>
+        <li><a href="#lazy-invalid的边界">lazy invalid的边界</a>
+          <ul>
+            <li><a href="#drop-table">drop table</a></li>
+            <li><a href="#truncate-table">truncate table</a></li>
+          </ul>
+        </li>
+        <li><a href="#正确性">正确性</a></li>
+        <li><a href="#性能">性能</a></li>
+        <li><a href="#限制条件">限制条件</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
