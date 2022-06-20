@@ -5,5 +5,25 @@
     <link>https://ayalastrike.github.io/docs/MySQL/Replication/</link>
     <description>Recent content on Rick&#39;s Blog</description>
     <generator>Hugo -- gohugo.io</generator><atom:link href="https://ayalastrike.github.io/docs/MySQL/Replication/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>MGR增加seconds_behind_master</title>
+      <link>https://ayalastrike.github.io/docs/MySQL/Replication/mgr_seconds_behind_master/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://ayalastrike.github.io/docs/MySQL/Replication/mgr_seconds_behind_master/</guid>
+      <description>客观存在的必要性 #  对于分布式系统，因为shared nothing架构的特点，内部通过RSM进行数据处理，保证了数据的最终一致性，所以需要关注的一个重要指标是各个replica的数据延迟。这不但关系到读取的一致性，也关系到系统的主从切换策略，从而影响可用性。
+方法论 #  对于测算，其实本质就是比较，但现实情况是：
+ 快慢的比较采用的是物理时钟，本身就不具备可比较性（时钟跳变/基准时钟不一致） 可比较的另一个必要条件是全序关系，本身也有挑战，比如节点间无法交互，无数据更新  所以可以看出，最完美的方式是：逻辑时钟，即可以保证全序关系（租约/心跳机制，且可驱逐），但会有节点间交互带来的性能挚肘。
+策略 #  测算数据延迟的策略：
+ 尽量不影响线上处理速度，只在观测点计算 时间的客观性 计算的准确性  分析 #  第一点：如果记录节点处理的最新点位，即在节点的每次数据处理时更新点位，那么会有2方面的性能问题：
+ 空耗计算能力，常态计算无意义 如果节点为了缩短延迟，可以采用并行回放的方式，那么线程间的应用点位需要原子操作，这可能会给并行增加串行点（改进方法是由coordinator更新应用点位）  所以，在设计之初最直观的想法是：从库的应用时间点位-主库的提交时间点位，可以变为：当前观测时间点位 - 主库的提交时间点位。
+第二点，客观性需要考虑：
+ 节点间时间线归约为一，且出生点位一定早于消费点位，如果节点无法交互，无数据更新，则无法归约 应满足单调性，即不考虑时钟跳变（时钟漂移，特指回移）  第三点，准确性的要求：
+ lag语义：出生点和消费点的lag（三级节点和回环结构） 第二点不满足时置0  综上，可以保证lag的计算一定为非负值。
+落地 #  主从lag的测算方式：当前时间（show slave status的命令执行时刻，即时计算）- 主库的执行时刻 - 主从库的时间偏移量 即主从lag公式具化为：clock_of_slave - last_master_timestamp - clock_diff_with_master
+实现 #  主从lag的计算公式：
+long time_diff= ((long)(time(0) - mi-&amp;gt;rli-&amp;gt;last_master_timestamp) - mi-&amp;gt;clock_diff_with_master); protocol-&amp;gt;store((longlong)(mi-&amp;gt;rli-&amp;gt;last_master_timestamp ?</description>
+    </item>
+    
   </channel>
 </rss>
